@@ -18,6 +18,7 @@ local custom_contrast = 30
 local custom_bloom_intensity = 0.45
 local custom_bloom_size = 3500
 local custom_sunrays_intensity = 0.35
+local custom_reflections = 2.5
 
 -- Default lighting backup for restore
 local defaultLighting = {
@@ -205,7 +206,7 @@ local function applyRTXPreset()
     Lighting.GlobalShadows = true
     Lighting.ShadowSoftness = 0.02
     Lighting.EnvironmentDiffuseScale = 1.0  
-    Lighting.EnvironmentSpecularScale = 2.5 
+    Lighting.EnvironmentSpecularScale = custom_reflections
 
     if Terrain then
         Terrain.WaterTransparency = 0.01
@@ -377,4 +378,9 @@ end)
 rtx_tab:AddSlider("SunRays Intensity", 0, 100, math.floor(custom_sunrays_intensity * 100), function(v)
     custom_sunrays_intensity = v / 100
     if custom_graphics_enabled then applyCustomGraphics() end
+end)
+
+rtx_tab:AddSlider("Reflections Intensity", 0, 50, math.floor(custom_reflections * 10), function(v)
+    custom_reflections = v / 10
+    Lighting.EnvironmentSpecularScale = custom_reflections
 end)
