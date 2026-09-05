@@ -1,0 +1,61 @@
+-- =============================
+-- PART 2 (Wide Screen & Fonts)
+-- =============================
+local shared = odh_shared_plugins
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local ui_tab = shared.AddSection("UI & Fonts")
+
+-- =============================
+-- WIDE SCREEN TOGGLE
+-- =============================
+local wideScreenEnabled = false
+local wideScreenStrength = 0.7
+
+ui_tab:AddToggle("Wide Screen", function(on)
+    wideScreenEnabled = on
+end)
+
+RunService.RenderStepped:Connect(function()
+    if wideScreenEnabled then
+        Camera.CFrame = Camera.CFrame * CFrame.new(0,0,0,1,0,0,0,wideScreenStrength,0,0,0,1)
+    end
+end)
+
+-- =============================
+-- FONTS
+-- =============================
+local fonts = {
+    ["SourceSansBold (Original)"] = Enum.Font.SourceSansBold,
+    ["Gotham"] = Enum.Font.Gotham,
+    ["Arcade"] = Enum.Font.Arcade,
+    ["Arial"] = Enum.Font.Arial,
+    ["ArialBold"] = Enum.Font.ArialBold,
+    ["Cartoon"] = Enum.Font.Cartoon,
+    ["Fantasy"] = Enum.Font.Fantasy,
+    ["Highway"] = Enum.Font.Highway,
+    ["Code"] = Enum.Font.Code,
+    ["Legacy"] = Enum.Font.Legacy
+}
+
+local selectedFont = "SourceSansBold (Original)"
+
+ui_tab:AddDropdown("Select Font", {
+    "SourceSansBold (Original)","Gotham","Arcade","Arial","ArialBold","Cartoon","Fantasy","Highway","Code","Legacy"
+}, function(option)
+    selectedFont = option
+    for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
+            gui.Font = fonts[selectedFont]
+        end
+    end
+end)
+
+-- Apply font to new GUI elements dynamically
+LocalPlayer.PlayerGui.DescendantAdded:Connect(function(gui)
+    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
+        gui.Font = fonts[selectedFont]
+    end
+end)
