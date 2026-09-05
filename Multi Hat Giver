@@ -1,0 +1,120 @@
+--------------------------------------------------------------------------------
+-- 2. Multi Hat Giver
+--------------------------------------------------------------------------------
+do
+    local section = shared.AddSection("Multi Hat Giver")  
+    local isEnabled = false
+    local customIds = {Slot1 = 0, Slot2 = 0, Slot3 = 0}
+    local selectedIds = {Slot1 = 0, Slot2 = 0, Slot3 = 0}
+    local activeHats = {Slot1 = nil, Slot2 = nil, Slot3 = nil}
+
+    local hatOptions = {  
+        "None|0",
+        "Dominus Astra|162067148",  
+        "Valkyrie|1365767",  
+        "Clockwork|1235488",
+        "Extreme Headphones|96079043",
+        "Fiery Horns|215718515",
+        "Frozen Horns|74891470",
+        "Poisoned Horns|1744060292",
+        "Custom|0"  
+    }
+
+    local function weldParts(part0, part1, c0, c1)
+        local weld = Instance.new("Weld")
+        weld.Part0, weld.Part1 = part0, part1
+        weld.C0, weld.C1 = c0, c1
+        weld.Parent = part0
+        return weld
+    end
+
+    local function findAttachment(rootPart, name)
+        for _, descendant in pairs(rootPart:GetDescendants()) do
+            if descendant:IsA("Attachment") and descendant.Name == name then
+                return descendant
+            end
+        end
+    end
+
+    local function clearSlot(slot)
+        if activeHats[slot] then 
+            activeHats[slot]:Destroy() 
+            activeHats[slot] = nil
+        end
+    end
+
+    local function applyHat(slot, accessoryId)
+        clearSlot(slot)
+        if not isEnabled or accessoryId == 0 then return end
+        
+        local character = LocalPlayer.Character
+        if not character or not character:FindFirstChild("Head") then return end
+
+        local success, objects = pcall(function() return game:GetObjects("rbxassetid://" .. tostring(accessoryId)) end)
+        if not success or #objects == 0 then return end
+        
+        local accessory = objects[1]
+        local handle = accessory:FindFirstChild("Handle")
+        
+        if handle then
+            handle.CanCollide, handle.CanTouch, handle.CanQuery, handle.Massless = false, false, false, true
+            accessory.Parent = character
+            local attachment = handle:FindFirstChildOfClass("Attachment")
+            
+            if attachment then
+                local parentAttachment = findAttachment(character.Head, attachment.Name)
+                if parentAttachment then
+                    weldParts(character.Head, handle, parentAttachment.CFrame, attachment.CFrame)
+                end
+            else
+                weldParts(character.Head, handle, CFrame.new(0, 0.5, 0), accessory.AttachmentPoint)
+            end
+            activeHats[slot] = accessory
+        end
+    end
+
+    local function refreshAllHats()
+        applyHat("Slot1", selectedIds["Slot1"])
+        applyHat("Slot2", selectedIds["Slot2"])
+        applyHat("Slot3", selectedIds["Slot3"])
+    end
+
+    section:AddToggle("Enable Hat Giver", function(bool)  
+        isEnabled = bool  
+        if isEnabled then refreshAllHats() else clearSlot("Slot1"); clearSlot("Slot2"); clearSlot("Slot3") end
+    end)
+
+    local dropdownNames = {}
+    for _, v in ipairs(hatOptions) do table.insert(dropdownNames, string.match(v, "(.-)|")) end
+
+    for i = 1, 3 do
+        local slotName = "Slot" .. i
+        section:AddDropdown("Hat Slot " .. i, dropdownNames, function(selected)
+            if selected == "Custom" then
+                selectedIds[slotName] = customIds[slotName]
+            else
+                for _, data in ipairs(hatOptions) do
+                    local name, id = string.match(data, "(.-)|(%d+)")
+                    if name == selected then
+                        selectedIds[slotName] = tonumber(id)
+                        break
+                    end
+                end
+            end
+            if isEnabled then applyHat(slotName, selectedIds[slotName]) end
+        end)
+
+        section:AddTextBox("Custom ID Slot " .. i, function(text)
+            local id = tonumber(text)
+            if id then
+                customIds[slotName] = id
+                if isEnabled then applyHat(slotName, id) end
+            end
+        end)
+    end
+
+    LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1.5)
+        if isEnabled then refreshAllHats() end
+    end)
+end
