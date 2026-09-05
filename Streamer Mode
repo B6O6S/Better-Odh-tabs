@@ -6,6 +6,8 @@ do
     local CoreGui = game:GetService("CoreGui")
     local section = shared.AddSection("Streamer Mode")
 
+    section:AddLabel("⚠️ To hide Delta enable the Streamer Mode and open Delta!")
+
     local enabled = false
 
     -- Streamer Mode Variables
@@ -198,5 +200,3 @@ do
         ToggleState(not enabled)
     end)
 end
-
-section:AddLabel("⚠️ To hide Delta enable the streamer Mode and open Delta!")
