@@ -16,7 +16,7 @@ blur.Name = "DeltaMotionBlur"
 blur.Size = 0
 
 local mb_enabled = false
-local maxBlurSize = 8  -- Default matches slider max range
+local maxBlurSize = 8  
 local blurDecay = 0.5   
 local lastCFrame = Camera.CFrame
 
@@ -123,16 +123,27 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- =============================
--- 3) TOOLS OUTLINE
+-- 3) TOOLS OUTLINE & TRANSPARENCY
 -- =============================
 local outline_enabled = false
 local outline_rainbow = false
+local tool_trans_enabled = false
+local outline_always_on_top = true
 local tool_highlights = {}
 
 local selectedOutline = Color3.fromRGB(128, 0, 128)
 local selectedFill    = Color3.fromRGB(0, 0, 0)
-local fillTrans       = 0.8
-local outlineTrans    = 0.8
+local fillTrans       = 8
+local outlineTrans    = 8
+local toolTrans       = 5
+
+local function applyToolTransparency(tool)
+    for _, part in ipairs(tool:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Transparency = tool_trans_enabled and (toolTrans / 10) or 0
+        end
+    end
+end
 
 local function ensureOutline(tool)
     if not tool:IsA("Tool") then return end
@@ -141,21 +152,24 @@ local function ensureOutline(tool)
     if not handle or not handle:IsA("BasePart") then return end
 
     handle.LocalTransparencyModifier = 0
+    if tool_trans_enabled then
+        applyToolTransparency(tool)
+    end
 
     local hl = tool:FindFirstChild("ToolOutline")
     if not hl then
         hl = Instance.new("Highlight")
         hl.Name = "ToolOutline"
         hl.Adornee = handle
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         hl.Parent = tool
     end
 
+    hl.DepthMode = outline_always_on_top and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
     hl.Enabled = outline_enabled
     hl.OutlineColor = selectedOutline
     hl.FillColor = selectedFill
-    hl.FillTransparency = fillTrans
-    hl.OutlineTransparency = outlineTrans
+    hl.FillTransparency = fillTrans / 10
+    hl.OutlineTransparency = outlineTrans / 10
 
     tool_highlights[tool] = hl
 end
@@ -189,6 +203,60 @@ custom_tab:AddToggle("Enable Tool Outline Theme", function(on)
     if on then applyOutlineToAllTools() else removeOutlines() end
 end)
 
+custom_tab:AddToggle("Highlight Through Walls", function(on)
+    outline_always_on_top = on
+    for _, hl in pairs(tool_highlights) do
+        if hl then
+            hl.DepthMode = on and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+        end
+    end
+end)
+
+custom_tab:AddToggle("Tool Transparency", function(on)
+    tool_trans_enabled = on
+    
+    local function updateTool(t)
+        if on then
+            applyToolTransparency(t)
+        else
+            for _, part in ipairs(t:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 0
+                end
+            end
+        end
+    end
+
+    if LocalPlayer:FindFirstChild("Backpack") then
+        for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+            updateTool(t)
+        end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        for _, t in ipairs(char:GetChildren()) do
+            updateTool(t)
+        end
+    end
+end)
+
+custom_tab:AddSlider("Tool Transparency Level", 0, 10, toolTrans, function(v)
+    toolTrans = v
+    if tool_trans_enabled then
+        if LocalPlayer:FindFirstChild("Backpack") then
+            for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                applyToolTransparency(t)
+            end
+        end
+        local char = LocalPlayer.Character
+        if char then
+            for _, t in ipairs(char:GetChildren()) do
+                applyToolTransparency(t)
+            end
+        end
+    end
+end)
+
 custom_tab:AddColorpicker("Outline Color", selectedOutline, function(color)
     selectedOutline = color
     for _, hl in pairs(tool_highlights) do
@@ -203,17 +271,17 @@ custom_tab:AddColorpicker("Fill Color", selectedFill, function(color)
     end
 end)
 
-custom_tab:AddSlider("Fill Transparency", 0, 10, 8, function(v)
-    fillTrans = v / 10
+custom_tab:AddSlider("Fill Transparency", 0, 10, fillTrans, function(v)
+    fillTrans = v
     for _, hl in pairs(tool_highlights) do
-        if hl then hl.FillTransparency = fillTrans end
+        if hl then hl.FillTransparency = fillTrans / 10 end
     end
 end)
 
-custom_tab:AddSlider("Outline Transparency", 0, 10, 8, function(v)
-    outlineTrans = v / 10
+custom_tab:AddSlider("Outline Transparency", 0, 10, outlineTrans, function(v)
+    outlineTrans = v
     for _, hl in pairs(tool_highlights) do
-        if hl then hl.OutlineTransparency = outlineTrans end
+        if hl then hl.OutlineTransparency = outlineTrans / 10 end
     end
 end)
 
@@ -241,15 +309,21 @@ end)
 -- =============================
 local function setupCharacter(char)
     char.ChildAdded:Connect(function(obj)
-        if obj:IsA("Tool") and outline_enabled then
+        if obj:IsA("Tool") then
             task.defer(function()
-                ensureOutline(obj)
+                if outline_enabled then ensureOutline(obj) end
+                if tool_trans_enabled then applyToolTransparency(obj) end
             end)
         end
     end)
     
     if outline_enabled then
         task.defer(applyOutlineToAllTools)
+    end
+    if tool_trans_enabled then
+        for _, t in ipairs(char:GetChildren()) do
+            if t:IsA("Tool") then applyToolTransparency(t) end
+        end
     end
 end
 
@@ -261,10 +335,11 @@ LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
 if LocalPlayer:FindFirstChild("Backpack") then
     LocalPlayer.Backpack.ChildAdded:Connect(function(obj)
-        if outline_enabled then 
+        if obj:IsA("Tool") then
             task.defer(function()
-                ensureOutline(obj)
-            end) 
+                if outline_enabled then ensureOutline(obj) end
+                if tool_trans_enabled then applyToolTransparency(obj) end
+            end)
         end
     end)
 end
