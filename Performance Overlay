@@ -1,0 +1,155 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
+
+-- =============================
+-- SETTINGS
+-- =============================
+local overlayEnabled = false
+local overlayScale = 50
+local activeStats = {}
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
+
+-- Use your shared plugin object directly
+local overlayTab = odh_shared_plugins.AddSection("Performance Overlay") -- Create the Overlay tab
+
+-- =============================
+-- SETTINGS
+-- =============================
+local overlayEnabled = false
+local overlayScale = 50
+local activeStats = {}
+
+-- =============================
+-- CREATE OVERLAY
+-- =============================
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PerformanceOverlay"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Position = UDim2.new(0, 10, 0, 10)
+mainFrame.BackgroundTransparency = 0.3
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Visible = overlayEnabled
+mainFrame.Parent = screenGui
+
+-- Labels
+local labels = {}
+local function createLabel(name)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1,0,0,20)
+    lbl.BackgroundTransparency = 1
+    lbl.TextScaled = true
+    lbl.Font = Enum.Font.SourceSansBold
+    lbl.TextColor3 = Color3.fromRGB(255,255,255)
+    lbl.Text = name
+    lbl.Visible = false
+    lbl.Parent = mainFrame
+    labels[name] = lbl
+    return lbl
+end
+
+local fpsLabel = createLabel("FPS: 0")
+local pingLabel = createLabel("Ping: 0 ms")
+local playersLabel = createLabel("Players: 0")
+
+local function updateOverlayLayout()
+    local scale = overlayScale / 50 -- smooth scaling factor
+    local yOffset = 0
+    for _, lbl in ipairs(activeStats) do
+        lbl.Position = UDim2.new(0,0,0,yOffset)
+        lbl.Size = UDim2.new(1,0,0,20*scale)
+        lbl.Visible = true
+        yOffset = yOffset + 20*scale
+    end
+    mainFrame.Size = UDim2.new(0, 120*scale, 0, yOffset)
+end
+
+-- =============================
+-- TOGGLES
+-- =============================
+overlayTab:AddToggle("Enable Overlay", function(on)
+    overlayEnabled = on
+    mainFrame.Visible = overlayEnabled
+    updateOverlayLayout()
+end)
+
+local function toggleStat(labelObj, on)
+    if on then
+        table.insert(activeStats, labelObj)
+    else
+        for i,v in ipairs(activeStats) do
+            if v == labelObj then table.remove(activeStats,i) break end
+        end
+        labelObj.Visible = false
+    end
+    updateOverlayLayout()
+end
+
+overlayTab:AddToggle("Show FPS", function(on) toggleStat(fpsLabel, on) end)
+overlayTab:AddToggle("Show Ping", function(on) toggleStat(pingLabel, on) end)
+overlayTab:AddToggle("Show Players in Server", function(on) toggleStat(playersLabel, on) end)
+
+overlayTab:AddSlider("Overlay Scale", 1, 100, overlayScale, function(v)
+    overlayScale = v
+    updateOverlayLayout()
+end)
+
+-- =============================
+-- UPDATE LOOP
+-- =============================
+local lastUpdate = tick()
+local frameCount = 0
+
+RunService.RenderStepped:Connect(function(delta)
+    if not overlayEnabled then return end
+
+    local now = tick()
+    frameCount += 1
+    if now - lastUpdate >= 1 then
+        local fps = math.floor(frameCount / (now - lastUpdate))
+        fpsLabel.Text = "FPS: "..fps
+        if fps <= 30 then fpsLabel.TextColor3 = Color3.fromRGB(255,0,0)
+        elseif fps <= 45 then fpsLabel.TextColor3 = Color3.fromRGB(255,165,0)
+        else fpsLabel.TextColor3 = Color3.fromRGB(0,255,0) end
+
+        frameCount = 0
+        lastUpdate = now
+    end
+
+    -- Ping
+    local pingVal = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    local ping = math.floor(pingVal)
+    pingLabel.Text = "Ping: "..ping.." ms"
+    if ping <= 170 then pingLabel.TextColor3 = Color3.fromRGB(0,255,0)
+    elseif ping <= 200 then pingLabel.TextColor3 = Color3.fromRGB(255,165,0)
+    else pingLabel.TextColor3 = Color3.fromRGB(255,0,0) end
+
+    -- Players
+    local playerCount = #Players:GetPlayers()
+    playersLabel.Text = "Players: "..playerCount
+    if playerCount >= 9 then
+        playersLabel.TextColor3 = Color3.fromRGB(0,255,0)
+    elseif playerCount >= 6 then
+        playersLabel.TextColor3 = Color3.fromRGB(255,165,0)
+    else
+        playersLabel.TextColor3 = Color3.fromRGB(255,0,0) 
+    end
+end)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
