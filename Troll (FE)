@@ -1,0 +1,121 @@
+-- =====================================
+-- PLUGIN TAB
+-- =====================================
+local pluginTab = odh_shared_plugins.AddSection("Troll (FE)")
+
+-- =====================================
+-- GUI SETUP
+-- =====================================
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local function createKnifeGui(name, imageId)
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = name .. "GUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
+    screenGui.Enabled = false -- hidden until toggle
+
+    local buttonSize = 100
+
+    local imageButton = Instance.new("ImageButton")
+    imageButton.Size = UDim2.new(0, buttonSize, 0, buttonSize)
+    imageButton.Position = UDim2.new(0.5, -buttonSize/2, 0.5, -buttonSize/2)
+    imageButton.Image = imageId
+    imageButton.BackgroundTransparency = 0.8
+    imageButton.Active = true
+    imageButton.Draggable = true
+    imageButton.Parent = screenGui
+
+    return screenGui, imageButton
+end
+
+-- =====================================
+-- ANIMATION FUNCTIONS
+-- =====================================
+local function playFakeKnifeAnimation(char)
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local knife = char:FindFirstChild("Knife")
+    if knife then
+        local animFolder = knife:FindFirstChild("Animations")
+        if animFolder then
+            local slash = animFolder:FindFirstChild("Slash")
+            local down = animFolder:FindFirstChild("Down")
+
+            if slash and slash:IsA("Animation") then
+                local track = humanoid:LoadAnimation(slash)
+                track:Play()
+                if down and down:IsA("Animation") then
+                    task.delay(1, function()
+                        local downTrack = humanoid:LoadAnimation(down)
+                        downTrack:Play()
+                    end)
+                end
+            end
+        end
+    end
+end
+
+local function playDualKnifeAnimation(char)
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        local anim1 = Instance.new("Animation")
+        anim1.AnimationId = "rbxassetid://2467577524" -- slash
+        local track1 = humanoid:LoadAnimation(anim1)
+        track1:Play()
+
+        task.delay(1, function()
+            local anim2 = Instance.new("Animation")
+            anim2.AnimationId = "rbxassetid://2470501967" -- dual
+            local track2 = humanoid:LoadAnimation(anim2)
+            track2:Play()
+        end)
+    end
+end
+
+-- =====================================
+-- FAKE KNIFE
+-- =====================================
+local fakeKnifeGui, fakeKnifeButton = createKnifeGui("FakeKnife", "rbxassetid://121774155770924")
+
+pluginTab:AddToggle("Fake Knife", function(on)
+    fakeKnifeGui.Enabled = on
+end)
+pluginTab:AddLabel("The murderer needs to hold the knife")
+
+pluginTab:AddSlider("Fake Knife Size", 50, 200, 100, function(v)
+    fakeKnifeButton.Size = UDim2.new(0, v, 0, v)
+    fakeKnifeButton.Position = UDim2.new(0.5, -v/2, 0.5, -v/2)
+end)
+
+fakeKnifeButton.MouseButton1Click:Connect(function()
+    playFakeKnifeAnimation(LocalPlayer.Character)
+end)
+fakeKnifeButton.TouchTap:Connect(function()
+    playFakeKnifeAnimation(LocalPlayer.Character)
+end)
+
+-- =====================================
+-- FAKE DUAL KNIFE
+-- =====================================
+local fakeDualGui, fakeDualButton = createKnifeGui("FakeDualKnife", "rbxassetid://131282777381667")
+
+pluginTab:AddToggle("Fake Dual Slash", function(on)
+    fakeDualGui.Enabled = on
+end)
+pluginTab:AddLabel("Works always... even in the lobby 😈")
+
+pluginTab:AddSlider("Fake Dual Slash Size", 50, 200, 100, function(v)
+    fakeDualButton.Size = UDim2.new(0, v, 0, v)
+    fakeDualButton.Position = UDim2.new(0.5, -v/2, 0.5, -v/2)
+end)
+
+fakeDualButton.MouseButton1Click:Connect(function()
+    playDualKnifeAnimation(LocalPlayer.Character)
+end)
+fakeDualButton.TouchTap:Connect(function()
+    playDualKnifeAnimation(LocalPlayer.Character)
+end)
