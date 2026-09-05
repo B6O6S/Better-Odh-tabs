@@ -1,121 +1,286 @@
--- =====================================
--- PLUGIN TAB
--- =====================================
-local pluginTab = odh_shared_plugins.AddSection("Troll (FE)")
+-- ===================================== -- PLUGIN TAB -- ===================================== 
+local pluginTab = odh_shared_plugins.AddSection("Troll (FE)") 
 
--- =====================================
--- GUI SETUP
--- =====================================
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Players = game:GetService("Players") 
+local LocalPlayer = Players.LocalPlayer 
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
 
-local function createKnifeGui(name, imageId)
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = name .. "GUI"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = playerGui
-    screenGui.Enabled = false -- hidden until toggle
+-- ===================================== -- GUI SETUP (DUAL KNIFE) -- ===================================== 
+local playerGui = LocalPlayer:WaitForChild("PlayerGui") 
 
-    local buttonSize = 100
+local function createKnifeGui(name, imageId) 
+    local screenGui = Instance.new("ScreenGui") 
+    screenGui.Name = name .. "GUI" 
+    screenGui.ResetOnSpawn = false 
+    screenGui.Parent = playerGui 
+    screenGui.Enabled = false 
 
-    local imageButton = Instance.new("ImageButton")
-    imageButton.Size = UDim2.new(0, buttonSize, 0, buttonSize)
-    imageButton.Position = UDim2.new(0.5, -buttonSize/2, 0.5, -buttonSize/2)
-    imageButton.Image = imageId
-    imageButton.BackgroundTransparency = 0.8
-    imageButton.Active = true
-    imageButton.Draggable = true
-    imageButton.Parent = screenGui
+    local buttonSize = 100 
+    local imageButton = Instance.new("ImageButton") 
+    imageButton.Size = UDim2.new(0, buttonSize, 0, buttonSize) 
+    imageButton.Position = UDim2.new(0.5, -buttonSize/2, 0.5, -buttonSize/2) 
+    imageButton.Image = imageId 
+    imageButton.BackgroundTransparency = 0.8 
+    imageButton.Active = true 
+    imageButton.Draggable = true 
+    imageButton.Parent = screenGui 
 
-    return screenGui, imageButton
+    return screenGui, imageButton 
+end 
+
+local function playDualKnifeAnimation(char) 
+    if not char then return end 
+    local humanoid = char:FindFirstChildOfClass("Humanoid") 
+    if humanoid then 
+        local anim1 = Instance.new("Animation") 
+        anim1.AnimationId = "rbxassetid://2467577524" 
+        local track1 = humanoid:LoadAnimation(anim1) 
+        track1:Play() 
+        task.delay(1, function() 
+            local anim2 = Instance.new("Animation") 
+            anim2.AnimationId = "rbxassetid://2470501967" 
+            local track2 = humanoid:LoadAnimation(anim2) 
+            track2:Play() 
+        end) 
+    end 
+end 
+
+local fakeDualGui, fakeDualButton = createKnifeGui("FakeDualKnife", "rbxassetid://131282777381667") 
+
+pluginTab:AddToggle("Fake Dual Slash", function(on) 
+    fakeDualGui.Enabled = on 
+end) 
+
+pluginTab:AddLabel("Works always... even in the lobby 😈") 
+
+pluginTab:AddSlider("Fake Dual Slash Size", 50, 200, 100, function(v) 
+    fakeDualButton.Size = UDim2.new(0, v, 0, v) 
+    fakeDualButton.Position = UDim2.new(0.5, -v/2, 0.5, -v/2) 
+end) 
+
+fakeDualButton.MouseButton1Click:Connect(function() 
+    playDualKnifeAnimation(LocalPlayer.Character) 
+end) 
+
+fakeDualButton.TouchTap:Connect(function() 
+    playDualKnifeAnimation(LocalPlayer.Character) 
+end)
+
+-- ===================================== -- BACKSHOTS FEATURE -- ===================================== 
+local backshotsGui = Instance.new("ScreenGui")
+backshotsGui.Name = "ToggleMovementGui"
+backshotsGui.ResetOnSpawn = false
+pcall(function()
+    backshotsGui.Parent = CoreGui
+end)
+if not backshotsGui.Parent then
+    backshotsGui.Parent = playerGui
 end
+backshotsGui.Enabled = false
 
--- =====================================
--- ANIMATION FUNCTIONS
--- =====================================
-local function playFakeKnifeAnimation(char)
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "backshots"
+toggleBtn.Size = UDim2.new(0, 120, 0, 50)
+toggleBtn.Position = UDim2.new(0.1, 0, 0.1, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 14
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.Text = "backshots: OFF"
+toggleBtn.Parent = backshotsGui
 
-    local knife = char:FindFirstChild("Knife")
-    if knife then
-        local animFolder = knife:FindFirstChild("Animations")
-        if animFolder then
-            local slash = animFolder:FindFirstChild("Slash")
-            local down = animFolder:FindFirstChild("Down")
+-- Draggable Logic
+local dragging, dragInput, dragStart, startPos
+toggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = toggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
 
-            if slash and slash:IsA("Animation") then
-                local track = humanoid:LoadAnimation(slash)
-                track:Play()
-                if down and down:IsA("Animation") then
-                    task.delay(1, function()
-                        local downTrack = humanoid:LoadAnimation(down)
-                        downTrack:Play()
-                    end)
+toggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        toggleBtn.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+local function setNoPlayerCollision(enabled)
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+        if otherPlayer ~= LocalPlayer and otherPlayer.Character then
+            for _, part in ipairs(otherPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = not enabled
                 end
             end
         end
     end
 end
 
-local function playDualKnifeAnimation(char)
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        local anim1 = Instance.new("Animation")
-        anim1.AnimationId = "rbxassetid://2467577524" -- slash
-        local track1 = humanoid:LoadAnimation(anim1)
-        track1:Play()
+local active = false
+local connection = nil
+local centerPos = nil
+local walkDir = 1
+local landDelayTick = 0
+local wasInAir = false
 
-        task.delay(1, function()
-            local anim2 = Instance.new("Animation")
-            anim2.AnimationId = "rbxassetid://2470501967" -- dual
-            local track2 = humanoid:LoadAnimation(anim2)
-            track2:Play()
-        end)
+local movementSpeed = 0.25
+local maxDistance = 0.1
+
+local function toggleBackshots(state)
+    active = state
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if active then
+        toggleBtn.Text = "backshots: ON"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+
+        if rootPart and humanoid then
+            centerPos = rootPart.Position
+            walkDir = 1
+            humanoid.AutoRotate = false
+            landDelayTick = 0
+            wasInAir = false
+
+            connection = RunService.RenderStepped:Connect(function()
+                if not character or not character.Parent or humanoid.Health <= 0 then
+                    return
+                end
+
+                setNoPlayerCollision(true)
+
+                local lookVector = Camera.CFrame.LookVector
+                local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
+                if flatLook.Magnitude > 0 then
+                    flatLook = flatLook.Unit
+                else
+                    flatLook = rootPart.CFrame.LookVector
+                    flatLook = Vector3.new(flatLook.X, 0, flatLook.Z).Unit
+                end
+
+                local state = humanoid:GetState()
+                local inAir = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.FallingDown)
+
+                if inAir then
+                    wasInAir = true
+                    centerPos = rootPart.Position
+                    walkDir = 1
+                    landDelayTick = tick() + 0.1
+                elseif wasInAir and not inAir then
+                    wasInAir = false
+                end
+
+                if humanoid.MoveDirection.Magnitude > 0 then
+                    centerPos = rootPart.Position
+                    walkDir = 1
+                end
+
+                if tick() < landDelayTick then
+                    centerPos = rootPart.Position
+                    return
+                end
+
+                local lockedLookCFrame = CFrame.lookAt(centerPos, centerPos + flatLook)
+                local currentPos = rootPart.Position
+                local displacement = (currentPos - centerPos):Dot(flatLook)
+
+                if displacement >= maxDistance then
+                    walkDir = -1
+                elseif displacement <= -maxDistance then
+                    walkDir = 1
+                end
+
+                local targetPosition = lockedLookCFrame.Position + (centerPos - lockedLookCFrame.Position) + (flatLook * displacement)
+
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+                raycastParams.FilterDescendantsInstances = {character}
+                
+                local raycastResult = workspace:Raycast(centerPos + Vector3.new(0, 2, 0), (targetPosition - centerPos), raycastParams)
+                if raycastResult then
+                    targetPosition = raycastResult.Position - (flatLook * 0.2)
+                end
+
+                local goalCFrame = lockedLookCFrame + (targetPosition - centerPos)
+                rootPart.CFrame = rootPart.CFrame:Lerp(goalCFrame, movementSpeed)
+                
+                humanoid:Move(flatLook * walkDir, false)
+            end)
+        end
+    else
+        toggleBtn.Text = "backshots: OFF"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+
+        setNoPlayerCollision(false)
+
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.AutoRotate = true
+                humanoid:Move(Vector3.zero, true)
+            end
+        end
+        centerPos = nil
     end
 end
 
--- =====================================
--- FAKE KNIFE
--- =====================================
-local fakeKnifeGui, fakeKnifeButton = createKnifeGui("FakeKnife", "rbxassetid://121774155770924")
-
-pluginTab:AddToggle("Fake Knife", function(on)
-    fakeKnifeGui.Enabled = on
-end)
-pluginTab:AddLabel("The murderer needs to hold the knife")
-
-pluginTab:AddSlider("Fake Knife Size", 50, 200, 100, function(v)
-    fakeKnifeButton.Size = UDim2.new(0, v, 0, v)
-    fakeKnifeButton.Position = UDim2.new(0.5, -v/2, 0.5, -v/2)
+toggleBtn.MouseButton1Click:Connect(function()
+    toggleBackshots(not active)
 end)
 
-fakeKnifeButton.MouseButton1Click:Connect(function()
-    playFakeKnifeAnimation(LocalPlayer.Character)
-end)
-fakeKnifeButton.TouchTap:Connect(function()
-    playFakeKnifeAnimation(LocalPlayer.Character)
-end)
-
--- =====================================
--- FAKE DUAL KNIFE
--- =====================================
-local fakeDualGui, fakeDualButton = createKnifeGui("FakeDualKnife", "rbxassetid://131282777381667")
-
-pluginTab:AddToggle("Fake Dual Slash", function(on)
-    fakeDualGui.Enabled = on
-end)
-pluginTab:AddLabel("Works always... even in the lobby 😈")
-
-pluginTab:AddSlider("Fake Dual Slash Size", 50, 200, 100, function(v)
-    fakeDualButton.Size = UDim2.new(0, v, 0, v)
-    fakeDualButton.Position = UDim2.new(0.5, -v/2, 0.5, -v/2)
+-- UI Options in Plugin Tab
+pluginTab:AddToggle("Show Backshots Button", function(on)
+    backshotsGui.Enabled = on
+    if not on and active then
+        toggleBackshots(false)
+    end
 end)
 
-fakeDualButton.MouseButton1Click:Connect(function()
-    playDualKnifeAnimation(LocalPlayer.Character)
+pluginTab:AddKeybind("Backshots Keybind", "B", function()
+    if backshotsGui.Enabled then
+        toggleBackshots(not active)
+    end
 end)
-fakeDualButton.TouchTap:Connect(function()
-    playDualKnifeAnimation(LocalPlayer.Character)
+
+pluginTab:AddSlider("Backshots Speed", 1, 100, 25, function(v)
+    movementSpeed = v / 100
+end)
+
+pluginTab:AddSlider("Backshots Distance", 1, 50, 10, function(v)
+    maxDistance = v / 100
+end)
+
+pluginTab:AddSlider("Backshots GUI Size", 50, 250, 120, function(v)
+    toggleBtn.Size = UDim2.new(0, v, 0, math.floor(v * (50/120)))
+    toggleBtn.TextSize = math.clamp(math.floor(v / 8), 10, 24)
 end)
