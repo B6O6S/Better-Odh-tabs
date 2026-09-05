@@ -194,3 +194,71 @@ function destroyToggleButton()
     toggleButton = nil
     enabled = false
 end
+----------------------------------------------------------------
+-- UI CONTROLS
+----------------------------------------------------------------
+
+speedSection:AddToggle("Enable Speed Glitch UI", function(v)
+    uiEnabled = v
+
+    if v then
+        createToggleButton()
+    else
+        destroyToggleButton()
+    end
+end)
+
+speedSection:AddSlider("Side Speed", 10, 1000, sideSpeed, function(v)
+    sideSpeed = v
+end)
+
+speedSection:AddSlider("Toggle Size", 40, 150, toggleSize, function(v)
+    toggleSize = v
+
+    if toggleButton then
+        toggleButton.Size = UDim2.new(0, toggleSize, 0, toggleSize)
+        toggleButton.Position = UDim2.new(0.5, -(toggleSize/2), 0.7, 0)
+    end
+end)
+
+-- DROPDOWN (WITH CUSTOM)
+speedSection:AddDropdown("Select Emote", {
+    "Moonwalk",
+    "Happier Jump",
+    "Bouncy Twirl",
+    "Flex Walk",
+    "Custom"
+}, function(choice)
+    if choice == "Custom" then
+        selectedEmoteId = customEmoteId
+    else
+        selectedEmoteId = emotes[choice]
+    end
+end)
+
+-- TEXTBOX (AUTO USE CUSTOM)
+speedSection:AddTextBox("Custom Emote ID", function(text)
+    if text and text ~= "" then
+        customEmoteId = text
+        selectedEmoteId = text
+    end
+end)
+
+----------------------------------------------------------------
+-- AUTO UI RECOVERY LOOP
+----------------------------------------------------------------
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+
+        if uiEnabled then
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+
+            if playerGui and (not screenGui or not screenGui.Parent or not toggleButton) then
+                destroyToggleButton()
+                createToggleButton()
+            end
+        end
+    end
+end)
