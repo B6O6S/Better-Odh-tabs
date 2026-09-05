@@ -2,6 +2,8 @@
 -- 3. Streamer Mode
 --------------------------------------------------------------------------------
 do
+    local shared = odh_shared_plugins
+    local CoreGui = game:GetService("CoreGui")
     local section = shared.AddSection("Streamer Mode")
     local enabled = false
     local sConnections = {}
@@ -99,6 +101,4 @@ do
         enabled = not enabled
         if enabled then Apply() else Restore() end
     end)
-
-    section:AddLabel('Credits To: not_.gato (@HeyyCaf)')
 end
