@@ -269,8 +269,3 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 trickTab:AddLabel('Credits To: <font color="rgb(255,0,255)">not_.gato (@HeyyCaf) - Owner of the feature</font>')
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
-local LocalPlayer = Players.LocalPlayer
