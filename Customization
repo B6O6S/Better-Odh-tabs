@@ -108,7 +108,7 @@ local function setJumpButtonSize(px)
     end
 end
 
-custom_tab:AddToggle("Jump Button Size Chnager ( Mobile )", function(on)
+custom_tab:AddToggle("Jump Button Size Changer (Mobile & Tablet)", function(on)
     jb_enabled = on
 end)
 
@@ -203,7 +203,7 @@ custom_tab:AddToggle("Enable Tool Outline Theme", function(on)
     if on then applyOutlineToAllTools() else removeOutlines() end
 end)
 
-custom_tab:AddToggle("Highlight Through Walls", function(on)
+custom_tab:AddToggle("Visible Behind Walls", function(on)
     outline_always_on_top = on
     for _, hl in pairs(tool_highlights) do
         if hl then
