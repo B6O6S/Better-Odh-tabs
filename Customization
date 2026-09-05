@@ -108,7 +108,7 @@ local function setJumpButtonSize(px)
     end
 end
 
-custom_tab:AddToggle("Jump Button Size Changer (Mobile & Tablet)", function(on)
+custom_tab:AddToggle("Jump Button Size Chnager ( Mobile )", function(on)
     jb_enabled = on
 end)
 
@@ -128,7 +128,7 @@ end)
 local outline_enabled = false
 local outline_rainbow = false
 local tool_trans_enabled = false
-local outline_always_on_top = true
+local outline_always_on_top = false
 local tool_highlights = {}
 
 local selectedOutline = Color3.fromRGB(128, 0, 128)
