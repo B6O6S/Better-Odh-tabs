@@ -2,7 +2,11 @@
 -- 2. Multi Hat Giver
 --------------------------------------------------------------------------------
 do
-    local section = shared.AddSection("Multi Hat Giver")  
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+    
+    local odh_shared_plugins = odh_shared_plugins -- make sure your shared plugin object exists
+    local section = odh_shared_plugins.AddSection("Multi Hat Giver")  
     local isEnabled = false
     local customIds = {Slot1 = 0, Slot2 = 0, Slot3 = 0}
     local selectedIds = {Slot1 = 0, Slot2 = 0, Slot3 = 0}
