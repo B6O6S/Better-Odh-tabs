@@ -1,0 +1,196 @@
+local speedSection = odh_shared_plugins.AddSection("Legit Speed Glitch")
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+----------------------------------------------------------------
+-- STATE
+----------------------------------------------------------------
+
+local uiEnabled = false
+local enabled = false
+local sideSpeed = 150
+local moveInput = 0
+local isJumping = false
+local selectedEmoteId
+local toggleSize = 80
+
+local Character
+local Humanoid
+local HRP
+
+local screenGui
+local toggleButton
+
+local customEmoteId = nil
+
+----------------------------------------------------------------
+-- CHARACTER BINDING
+----------------------------------------------------------------
+
+local function bindCharacter(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+    HRP = char:WaitForChild("HumanoidRootPart")
+
+    isJumping = false
+
+    Humanoid.Jumping:Connect(function()
+        isJumping = true
+    end)
+
+    Humanoid.StateChanged:Connect(function(_, state)
+        if state == Enum.HumanoidStateType.Landed then
+            isJumping = false
+        end
+    end)
+end
+
+bindCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
+LocalPlayer.CharacterAdded:Connect(bindCharacter)
+
+----------------------------------------------------------------
+-- INPUT
+----------------------------------------------------------------
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.A then
+        moveInput = -1
+    elseif input.KeyCode == Enum.KeyCode.D then
+        moveInput = 1
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.D then
+        moveInput = 0
+    end
+end)
+
+----------------------------------------------------------------
+-- EMOTE SYSTEM
+----------------------------------------------------------------
+
+local function playEmote(id)
+    if not Character then return end
+    local hum = Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    local ok = pcall(function()
+        hum:PlayEmoteAndGetAnimTrackById(id)
+    end)
+
+    if not ok then
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. id
+
+        local track = hum:LoadAnimation(anim)
+        if track then track:Play() end
+    end
+end
+
+----------------------------------------------------------------
+-- MOVEMENT LOOP
+----------------------------------------------------------------
+
+RunService.Heartbeat:Connect(function()
+    if not enabled then return end
+    if not Character or not Humanoid or not HRP then return end
+    if not isJumping then return end
+
+    local dir = moveInput
+
+    if dir == 0 and Humanoid.MoveDirection.Magnitude > 0 then
+        local cf = CFrame.new(Vector3.new(), Camera.CFrame.LookVector)
+        dir = (cf.RightVector:Dot(Humanoid.MoveDirection) > 0) and 1 or -1
+    end
+
+    if dir ~= 0 then
+        local right = Camera.CFrame.RightVector
+        local flat = Vector3.new(right.X, 0, right.Z).Unit
+
+        HRP.Velocity = flat * (dir * sideSpeed) + Vector3.new(0, HRP.Velocity.Y, 0)
+    end
+end)
+
+----------------------------------------------------------------
+-- EMOTES
+----------------------------------------------------------------
+
+local emotes = {
+    ["Moonwalk"] = "79127989560307",
+    ["Happier Jump"] = "15610015346",
+    ["Bouncy Twirl"] = "14353423348",
+    ["Flex Walk"] = "15506506103"
+}
+
+----------------------------------------------------------------
+-- UI FUNCTIONS
+----------------------------------------------------------------
+
+local function updateButtonVisual()
+    if not toggleButton then return end
+    toggleButton.BackgroundColor3 = enabled and Color3.fromRGB(0,200,0) or Color3.fromRGB(200,0,0)
+end
+
+function createToggleButton()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return end
+    if screenGui and toggleButton then return end
+
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "SpeedGlitchUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
+
+    toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, toggleSize, 0, toggleSize)
+    toggleButton.Position = UDim2.new(0.5, -(toggleSize/2), 0.7, 0)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    toggleButton.TextColor3 = Color3.fromRGB(255,255,255)
+    toggleButton.TextScaled = true
+    toggleButton.Text = "Speed Glitch"
+    toggleButton.BorderSizePixel = 0
+    toggleButton.AutoButtonColor = false
+    toggleButton.Parent = screenGui
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = Color3.fromRGB(0,0,0)
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = toggleButton
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0,0)
+    corner.Parent = toggleButton
+
+    toggleButton.Active = true
+    toggleButton.Draggable = true
+
+    toggleButton.MouseButton1Click:Connect(function()
+        enabled = not enabled
+        updateButtonVisual()
+
+        if enabled and selectedEmoteId then
+            playEmote(selectedEmoteId)
+        end
+    end)
+
+    updateButtonVisual()
+end
+
+function destroyToggleButton()
+    if screenGui then
+        screenGui:Destroy()
+    end
+    screenGui = nil
+    toggleButton = nil
+    enabled = false
+end
