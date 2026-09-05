@@ -9,7 +9,7 @@ local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 local rtx_enabled = false
 local time_of_day_enabled = false
 local custom_graphics_enabled = false
-local current_time_mode = "Morning (Clean Golden)"
+local current_time_mode = "Default (Original Game Time)"
 
 -- Stored Custom Settings
 local custom_brightness = 20
@@ -60,7 +60,17 @@ local function applyTimeOfDay(mode)
     if atmosphere_instance then atmosphere_instance:Destroy() atmosphere_instance = nil end
     if sky_instance then sky_instance:Destroy() sky_instance = nil end
 
-    if mode == "Morning (Clean Golden)" then
+    if mode == "Default (Original Game Time)" then
+        Lighting.ClockTime = defaultLighting.ClockTime
+        Lighting.GeographicLatitude = defaultLighting.GeographicLatitude
+        Lighting.Brightness = defaultLighting.Brightness
+        Lighting.Ambient = defaultLighting.Ambient
+        Lighting.OutdoorAmbient = defaultLighting.OutdoorAmbient
+        Lighting.ColorShift_Bottom = defaultLighting.ColorShift_Bottom
+        Lighting.ColorShift_Top = defaultLighting.ColorShift_Top
+        Lighting.ExposureCompensation = defaultLighting.ExposureCompensation
+
+    elseif mode == "Morning (Clean Golden)" then
         Lighting.ClockTime = 7.0
         Lighting.Brightness = 3.2
         Lighting.Ambient = Color3.fromRGB(55, 50, 45)
@@ -315,10 +325,16 @@ rtx_tab:AddToggle("Enable Custom Time of Day", function(on)
         if sky_instance then sky_instance:Destroy() sky_instance = nil end
         Lighting.ClockTime = defaultLighting.ClockTime
         Lighting.GeographicLatitude = defaultLighting.GeographicLatitude
+        Lighting.Brightness = defaultLighting.Brightness
+        Lighting.Ambient = defaultLighting.Ambient
+        Lighting.OutdoorAmbient = defaultLighting.OutdoorAmbient
+        Lighting.ColorShift_Bottom = defaultLighting.ColorShift_Bottom
+        Lighting.ColorShift_Top = defaultLighting.ColorShift_Top
+        Lighting.ExposureCompensation = defaultLighting.ExposureCompensation
     end
 end)
 
-rtx_tab:AddDropdown("Time of Day Preset", {"Morning (Clean Golden)", "Midday (Vibrant Sun)", "Afternoon (Golden Hour)", "Sunset (Natural Warmth)", "Night (Cool Moonlight)", "Midnight (Pitch Black & Stars)"}, function(selected)
+rtx_tab:AddDropdown("Time of Day Preset", {"Default (Original Game Time)", "Morning (Clean Golden)", "Midday (Vibrant Sun)", "Afternoon (Golden Hour)", "Sunset (Natural Warmth)", "Night (Cool Moonlight)", "Midnight (Pitch Black & Stars)"}, function(selected)
     current_time_mode = selected
     if time_of_day_enabled then
         applyTimeOfDay(selected)
