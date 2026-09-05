@@ -1,0 +1,104 @@
+--------------------------------------------------------------------------------
+-- 3. Streamer Mode
+--------------------------------------------------------------------------------
+do
+    local section = shared.AddSection("Streamer Mode")
+    local enabled = false
+    local sConnections = {}
+    local originals = setmetatable({}, { __mode = "k" })
+
+    local function GetUI()
+        for _, inst in ipairs(CoreGui:GetDescendants()) do
+            if inst.Name == "@bubbles.elia" then
+                return inst:FindFirstAncestorWhichIsA("LayerCollector")
+            end
+        end
+    end
+
+    local function ShouldIgnore(inst)
+        local p = inst
+        while p do
+            if p:IsA("CanvasGroup") then return true end
+            if p:IsA("Folder") and (p.Name == "ESP" or p.Name == "Chams") then return true end
+            p = p.Parent
+        end
+        return false
+    end
+
+    local function Save(inst, prop)
+        local t = originals[inst]
+        if not t then t = {}; originals[inst] = t end
+        if t[prop] == nil then
+            local ok, value = pcall(function() return inst[prop] end)
+            if ok then t[prop] = value end
+        end
+    end
+
+    local function ApplyHiddenProperties(inst)
+        if inst:IsA("GuiObject") then
+            Save(inst, "BackgroundTransparency"); inst.BackgroundTransparency = 1
+            Save(inst, "BorderSizePixel"); inst.BorderSizePixel = 0
+        end
+        if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
+            Save(inst, "TextTransparency"); inst.TextTransparency = 1
+            Save(inst, "TextStrokeTransparency"); inst.TextStrokeTransparency = 1
+        end
+        if inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
+            Save(inst, "ImageTransparency"); inst.ImageTransparency = 1
+            Save(inst, "AutoButtonColor"); inst.AutoButtonColor = false
+        end
+        if inst:IsA("VideoFrame") then Save(inst, "VideoTransparency"); inst.VideoTransparency = 1 end
+        if inst:IsA("UIStroke") then Save(inst, "Transparency"); inst.Transparency = 1 end
+        if inst:IsA("UIGradient") then Save(inst, "Transparency"); inst.Transparency = NumberSequence.new(1) end
+        if inst:IsA("ScrollingFrame") then Save(inst, "ScrollBarImageTransparency"); inst.ScrollBarImageTransparency = 1 end
+    end
+
+    local function Hide(inst)
+        if ShouldIgnore(inst) then return end
+        ApplyHiddenProperties(inst)
+        local conn = inst.Changed:Connect(function()
+            if enabled then ApplyHiddenProperties(inst) end
+        end)
+        table.insert(sConnections, conn)
+    end
+
+    local function Restore()
+        for inst, props in pairs(originals) do
+            if inst then
+                for prop, value in pairs(props) do
+                    pcall(function() inst[prop] = value end)
+                end
+            end
+        end
+        table.clear(originals)
+        for _, conn in pairs(sConnections) do conn:Disconnect() end
+        table.clear(sConnections)
+    end
+
+    local function Apply()
+        local ui = GetUI()
+        if not ui then
+            if shared.Notify then shared.Notify("UI not found.", 3) end
+            return
+        end
+        Hide(ui)
+        for _, obj in ipairs(ui:GetDescendants()) do Hide(obj) end
+
+        local conn = ui.DescendantAdded:Connect(function(obj)
+            if enabled then Hide(obj) end
+        end)
+        table.insert(sConnections, conn)
+    end
+
+    section:AddToggle("Streamer Mode", function(bool)
+        enabled = bool
+        if enabled then Apply() else Restore() end
+    end)
+
+    section:AddKeybind("Unhide Keybind", "", function()
+        enabled = not enabled
+        if enabled then Apply() else Restore() end
+    end)
+
+    section:AddLabel('Credits To: not_.gato (@HeyyCaf)')
+end
