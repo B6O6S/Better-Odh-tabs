@@ -1,4 +1,4 @@
--- local Players = game:GetService("Players")
+local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Lighting = game:GetService("Lighting")
 local InsertService = game:GetService("InsertService")
@@ -6,9 +6,7 @@ local RunService = game:GetService("RunService")
 
 local odh_shared_plugins = odh_shared_plugins -- make sure your shared plugin object exists
 
-
 -- Store original sky if it exists
-local Lighting = game:GetService("Lighting")
 local originalSkyProps = nil
 local originalSky = Lighting:FindFirstChildOfClass("Sky")
 if originalSky then
@@ -24,11 +22,26 @@ if originalSky then
         StarCount = originalSky.StarCount
     }
 end
--- Part 2: Skybox Changer (First Half)
-local skySection = shared.AddSection("Sky Changer")
+
+-- Part 2: Skybox Changer
+local skySection = odh_shared_plugins.AddSection("Sky Changer")
 
 -- Sky presets
 local skyboxPresets = {
+    ["Default"] = function()
+        for _, obj in ipairs(Lighting:GetChildren()) do if obj:IsA("Sky") then obj:Destroy() end end
+        if originalSkyProps then
+            local sky = Instance.new("Sky")
+            for prop, val in pairs(originalSkyProps) do
+                sky[prop] = val
+            end
+            sky.Parent = Lighting
+        end
+        Lighting.Ambient = Color3.fromRGB(127, 127, 127)
+        Lighting.Brightness = 2
+        Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+    end,
+
     ["Minecraft Sky"] = function()
         for _, obj in ipairs(Lighting:GetChildren()) do if obj:IsA("Sky") then obj:Destroy() end end
         local sky = Instance.new("Sky")
@@ -96,6 +109,7 @@ local skyboxPresets = {
         Lighting.Brightness = 0.23
         Lighting.OutdoorAmbient = Color3.fromRGB(95, 0, 182)
     end,
+
     ["Sunset"] = function()
         for _, obj in ipairs(Lighting:GetChildren()) do if obj:IsA("Sky") then obj:Destroy() end end
         local sky = Instance.new("Sky")
@@ -111,7 +125,7 @@ local skyboxPresets = {
         Lighting.OutdoorAmbient = Color3.fromRGB(210, 104, 0)
     end,
 
-["Nighty Sky"] = function()
+    ["Nighty Sky"] = function()
         for _, obj in pairs(Lighting:GetChildren()) do if obj:IsA("Sky") then obj:Destroy() end end
         local sky = Instance.new("Sky"); sky.Name = "CustomSky"
         sky.SkyboxBk = "rbxassetid://168387023"
@@ -235,6 +249,7 @@ local skyboxPresets = {
         Lighting.ShadowColor = Color3.fromRGB(14,4,39)
         Lighting.ShadowSoftness = 0.2
     end,
+
     ["Half-Life 2 Sky"] = function()
         for _, obj in ipairs(Lighting:GetChildren()) do if obj:IsA("Sky") then obj:Destroy() end end
         local sky = Instance.new("Sky")
@@ -319,10 +334,18 @@ local skyboxPresets = {
     end,
 }
 
--- Dropdown for the first half
-local skyKeys = {}
-for k, _ in pairs(skyboxPresets) do table.insert(skyKeys, k) end
-table.sort(skyKeys)
+-- Dropdown population (forcing "Default" to be first)
+local skyKeys = {"Default"}
+for k, _ in pairs(skyboxPresets) do
+    if k ~= "Default" then
+        table.insert(skyKeys, k)
+    end
+end
+-- Sort the rest alphabetically while keeping "Default" at index 1
+local remainingKeys = {}
+for i = 2, #skyKeys do table.insert(remainingKeys, skyKeys[i]) end
+table.sort(remainingKeys)
+for i, v in ipairs(remainingKeys) do skyKeys[i + 1] = v end
 
 local selectedSkybox = skyKeys[1]
 
@@ -333,11 +356,14 @@ end)
 skySection:AddButton("Apply Selected Skybox", function()
     if selectedSkybox and skyboxPresets[selectedSkybox] then
         skyboxPresets[selectedSkybox]()
-        shared.Notify("Applied "..selectedSkybox, 1)
+        if shared and shared.Notify then
+            shared.Notify("Applied "..selectedSkybox, 1)
+        end
     else
-        shared.Notify("No skybox selected or preset missing.", 3)
+        if shared and shared.Notify then
+            shared.Notify("No skybox selected or preset missing.", 3)
+        end
     end
 end)
 
 skySection:AddLabel('Credits To: <font color="rgb(255,0,255)">not_.gato (@HeyyCaf) - Owner of the feature</font>')
-
