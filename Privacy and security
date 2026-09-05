@@ -1,0 +1,76 @@
+local shared = odh_shared_plugins
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local privacyTab = shared.AddSection("Privacy & Security")
+
+-- =============================
+-- BUTTON: Hide Username Once
+-- =============================
+privacyTab:AddButton("Hide My Username", function()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+    local function updateGuiNames()
+        for _, obj in ipairs(playerGui:GetDescendants()) do
+            if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text:find(LocalPlayer.Name) then
+                obj.Text = "Hidden"
+            end
+        end
+    end
+
+    updateGuiNames()
+
+    -- Also catch future GUI elements
+    playerGui.DescendantAdded:Connect(function(obj)
+        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text:find(LocalPlayer.Name) then
+            task.defer(function()
+                obj.Text = "Hidden"
+            end)
+        end
+    end)
+
+    shared.Notify("Your username is now hidden in GUIs", 2)
+end)
+
+-- =============================
+-- TOGGLE: Hide Avatar Thumbnail
+-- =============================
+local hideThumbnail = false
+privacyTab:AddToggle("Hide My Avatar", function(state)
+    hideThumbnail = state
+
+    local function updateThumbnails()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+        for _, obj in ipairs(playerGui:GetDescendants()) do
+            if (obj:IsA("ImageLabel") or obj:IsA("ImageButton")) and obj.Image:find(tostring(LocalPlayer.UserId)) then
+                if hideThumbnail then
+                    obj.Image = "rbxasset://textures/transparent.png"
+                else
+                    -- Restore to default Roblox headshot
+                    local success, thumb = pcall(function()
+                        return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+                    end)
+                    if success then obj.Image = thumb end
+                end
+            end
+        end
+
+        -- Hook new GUI elements
+        if hideThumbnail then
+            if not playerGui:FindFirstChild("__HideThumbnailConnection") then
+                local conn = Instance.new("BoolValue")
+                conn.Name = "__HideThumbnailConnection"
+                conn.Parent = playerGui
+                playerGui.DescendantAdded:Connect(function(obj)
+                    if (obj:IsA("ImageLabel") or obj:IsA("ImageButton")) and obj.Image:find(tostring(LocalPlayer.UserId)) then
+                        task.defer(function()
+                            obj.Image = "rbxasset://textures/transparent.png"
+                        end)
+                    end
+                end)
+            end
+        end
+    end
+
+    updateThumbnails()
+end)
