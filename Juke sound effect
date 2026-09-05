@@ -1,7 +1,7 @@
 local shared = odh_shared_plugins
 
 -- Create a new section
-local jukeSoundSection = shared.AddSection("Juke Sound effect)
+local jukeSoundSection = shared.AddSection("Juke Sound effect")
 
 -- Sound options (default first)
 local sounds = {
