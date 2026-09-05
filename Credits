@@ -1,18 +1,14 @@
--- =============================
--- CREDITS
--- =============================
-if credits_tab then
-    credits_tab:AddLabel('Credits To: <font color="rgb(255,0,0)">B6O6S (@B6O6S) - Owner/Programmer</font>')
+local shared = odh_shared_plugins
+
+local credits_tab = shared.AddSection("Credits")
+
+credits_tab:AddLabel('Credits To: <font color="rgb(255,0,0)">B6O6S (@B6O6S) - Owner/Programmer</font>')
 credits_tab:AddLabel('Credits To: <font color="rgb(255,0,0)">k.6z (@3r_q5) - Helper/Tester</font>')
 credits_tab:AddLabel('Note: <font color="rgb(0,255,0)">We really spent alot of time trying to make the best</font>')
 credits_tab:AddLabel('<font color="rgb(0,255,0)">and fun plugin for everyone to use for free and enjoy</font>')
 credits_tab:AddLabel('<font color="rgb(0,255,0)">our dms is open feel free to ask or giving suggestions</font>')
 credits_tab:AddLabel('<font color="rgb(0,255,0)">or reporting bugs, have fun ♥️</font>')
-end
 
--- =============================
--- FINAL NOTIFICATION
--- =============================
 if shared and shared.Notify then
     shared.Notify("Better ODH Plugin Loaded Successfully!", 3)
 end
