@@ -10,5 +10,5 @@ credits_tab:AddLabel('<font color="rgb(0,255,0)">our dms is open feel free to as
 credits_tab:AddLabel('<font color="rgb(0,255,0)">or reporting bugs, have fun ♥️</font>')
 
 if shared and shared.Notify then
-    shared.Notify("Better ODH Plugin Loaded Successfully!", 3)
+    shared.Notify("Better ODH Plugin Loaded Successfully!", 2)
 end
