@@ -1,5 +1,5 @@
 -- =============================
--- PART 2 (Wide Screen & Fonts)
+-- PART 2 (Stretch Screen & Fonts)
 -- =============================
 local shared = odh_shared_plugins
 local Players = game:GetService("Players")
@@ -14,7 +14,7 @@ local ui_tab = shared.AddSection("UI & Fonts")
 local wideScreenEnabled = false
 local wideScreenStrength = 0.7
 
-ui_tab:AddToggle("Wide Screen", function(on)
+ui_tab:AddToggle("Stretch Screen", function(on)
     wideScreenEnabled = on
 end)
 
