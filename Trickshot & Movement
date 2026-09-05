@@ -1,4 +1,14 @@
 -- =============================
+-- SERVICES & CORE VARIABLES
+-- =============================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+-- =============================
 -- TRICKSHOT & MOVEMENT TAB
 -- =============================
 local trickTab = odh_shared_plugins.AddSection("Trickshot & Movement")
@@ -42,7 +52,7 @@ local function setupHumanoid(h)
             boosted = false
         end
         if jump360Enabled and spinOnNextJump and humanoid.Jump then
-            local HRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local HRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if HRP then
                 local totalSpin = math.rad(360)
                 local steps = 30
@@ -176,6 +186,7 @@ trickTab:AddSlider("360 Jump Button Size", 50, 200, jump360Size, function(v)
         button360.Position = UDim2.new(0.5, -jump360Size/2, 0.5, -jump360Size/2)
     end
 end)
+
 -- =============================
 -- APPLY MOVEMENTS
 -- =============================
@@ -265,7 +276,6 @@ UserInputService.JumpRequest:Connect(function()
     if wallhopEnabled and InfiniteJumpEnabled then
         performWallhop()
     end
-
 end)
 
 trickTab:AddLabel('Credits To: <font color="rgb(255,0,255)">not_.gato (@HeyyCaf) - Owner of the feature</font>')
