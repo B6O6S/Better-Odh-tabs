@@ -1,0 +1,147 @@
+local shared = odh_shared_plugins
+
+-- Create a new section
+local jukeSoundSection = shared.AddSection("Juke Sound effect)
+
+-- Sound options (default first)
+local sounds = {
+    "Ankle break|116630605163027",
+    "Where are you going|140099088033128",
+    "Please Speed i need this|96825144718073",
+    "بالراحة (B6O6S)|90233621241303",
+    "بسم الله عليك (B6O6S)|109098054743197",
+    "Meow|7148585764",
+    "Bruh|6349641063",
+    "Fart|8551016315",
+    "Custom|0" -- Placeholder for textbox input
+}
+
+local selectedSoundId = "rbxassetid://116630605163027" -- default selected
+local customEnabled = false
+local customTextboxId = nil -- Store user input for custom ID
+local lastSelected = "Ankle break" -- Track dropdown selection
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local roles
+local Murder
+local hasPlayedJuke = false
+local JUKE_DISTANCE = 15 -- Distance in studs to trigger the sound
+
+-- Function to play the custom juke sound
+local function playJukeSound()
+    if not selectedSoundId or not customEnabled then return end
+    
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = selectedSoundId
+    soundObj.Volume = 1
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Destroy()
+end
+
+-- Function to check distance to the murderer
+local function checkJuke()
+    if not customEnabled or not Murder then return end
+    local murdererPlayer = Players:FindFirstChild(Murder)
+    
+    if murdererPlayer and murdererPlayer.Character and murdererPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local mRoot = murdererPlayer.Character.HumanoidRootPart
+        local lpRoot = LocalPlayer.Character.HumanoidRootPart
+        
+        local distance = (mRoot.Position - lpRoot.Position).Magnitude
+        
+        -- Simple IsAlive check
+        local isAlive = false
+        if roles and roles[Murder] then
+            local data = roles[Murder]
+            if not data.Killed and not data.Dead then
+                isAlive = true
+            end
+        end
+        
+        if distance <= JUKE_DISTANCE and isAlive then
+            if not hasPlayedJuke then
+                playJukeSound()
+                hasPlayedJuke = true
+            end
+        else
+            if distance > (JUKE_DISTANCE + 5) then
+                hasPlayedJuke = false
+            end
+        end
+    end
+end
+
+-- Heartbeat loop to fetch roles and handle juke detection
+RunService.Heartbeat:Connect(function()
+    local playerDataFunc = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+    if playerDataFunc then
+        local success, res = pcall(function()
+            return playerDataFunc:InvokeServer()
+        end)
+        if success and res then
+            roles = res
+            for i, v in pairs(roles) do
+                if v.Role == "Murderer" then
+                    Murder = i
+                    break
+                end
+            end
+        end
+    end
+    
+    if customEnabled then
+        checkJuke()
+    end
+end)
+
+-- Toggle for enabling/disabling custom juke sound
+jukeSoundSection:AddToggle("Enable Juke Sound", function(bool)
+    customEnabled = bool
+    hasPlayedJuke = false
+end)
+
+-- Slider to control juke trigger distance (min: 5, max: 50, default: 15)
+jukeSoundSection:AddSlider("Juke Distance", 5, 50, 15, function(value)
+    JUKE_DISTANCE = value
+end)
+
+-- TextBox for custom SoundId
+jukeSoundSection:AddTextBox("Custom SoundId", function(text)
+    if text and text ~= "" then
+        if not string.find(text, "rbxassetid://") then
+            customTextboxId = "rbxassetid://" .. text
+        else
+            customTextboxId = text
+        end
+        if lastSelected == "Custom" then
+            selectedSoundId = customTextboxId
+        end
+    end
+end)
+
+-- Dropdown to select the custom sound
+local dropdownOptions = {}
+for _, data in ipairs(sounds) do
+    local name = string.match(data, "(.-)|%d+")
+    table.insert(dropdownOptions, name)
+end
+
+jukeSoundSection:AddDropdown("Select Juke Sound", dropdownOptions, function(selected)
+    lastSelected = selected
+    if selected == "Custom" then
+        selectedSoundId = customTextboxId
+    else
+        for _, data in ipairs(sounds) do
+            local name, id = string.match(data, "(.-)|(%d+)")
+            if name == selected then
+                selectedSoundId = "rbxassetid://" .. id
+                break
+            end
+        end
+    end
+end)
