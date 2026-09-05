@@ -1,6 +1,5 @@
 local shared = odh_shared_plugins
 local perf_tab    = shared.AddSection("Performance & FPS")
-local credits_tab = shared.AddSection("Credits")
 local Lighting    = game:GetService("Lighting")
 local Workspace   = game:GetService("Workspace")
 local Players     = game:GetService("Players")
