@@ -1,0 +1,364 @@
+local shared = odh_shared_plugins
+local rtx_tab = shared.AddSection("RTX & Graphics")
+
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+
+-- Master States
+local rtx_enabled = false
+local time_of_day_enabled = false
+local custom_graphics_enabled = false
+local current_time_mode = "Morning (Clean Golden)"
+
+-- Stored Custom Settings
+local custom_brightness = 20
+local custom_saturation = 35
+local custom_contrast = 30
+local custom_bloom_intensity = 0.45
+local custom_bloom_size = 3500
+local custom_sunrays_intensity = 0.35
+
+-- Default lighting backup for restore
+local defaultLighting = {
+    Technology = Lighting.Technology,
+    GlobalShadows = Lighting.GlobalShadows,
+    Brightness = Lighting.Brightness,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    ColorShift_Bottom = Lighting.ColorShift_Bottom,
+    ColorShift_Top = Lighting.ColorShift_Top,
+    EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+    ShadowSoftness = Lighting.ShadowSoftness,
+    GeographicLatitude = Lighting.GeographicLatitude,
+    ExposureCompensation = Lighting.ExposureCompensation,
+    ClockTime = Lighting.ClockTime,
+    WaterTransparency = Terrain and Terrain.WaterTransparency or 0.3,
+    WaterReflectance = Terrain and Terrain.WaterReflectance or 0,
+}
+
+-- Effect Instances
+local rtx_instances = {}
+local atmosphere_instance, sky_instance
+
+local function removeEffects(tbl)
+    for _, obj in ipairs(tbl) do
+        if obj and obj.Parent then
+            obj:Destroy()
+        end
+    end
+    table.clear(tbl)
+    if atmosphere_instance then atmosphere_instance:Destroy() atmosphere_instance = nil end
+    if sky_instance then sky_instance:Destroy() sky_instance = nil end
+end
+
+local function applyTimeOfDay(mode)
+    if not time_of_day_enabled then return end
+    
+    -- Cleanup previous atmosphere/sky
+    if atmosphere_instance then atmosphere_instance:Destroy() atmosphere_instance = nil end
+    if sky_instance then sky_instance:Destroy() sky_instance = nil end
+
+    if mode == "Morning (Clean Golden)" then
+        Lighting.ClockTime = 7.0
+        Lighting.Brightness = 3.2
+        Lighting.Ambient = Color3.fromRGB(55, 50, 45)
+        Lighting.OutdoorAmbient = Color3.fromRGB(190, 160, 130)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(20, 15, 10)
+        Lighting.ColorShift_Top = Color3.fromRGB(255, 235, 205)
+        Lighting.ExposureCompensation = 0.3
+        Lighting.GeographicLatitude = -25
+
+        atmosphere_instance = Instance.new("Atmosphere", Lighting)
+        atmosphere_instance.Density = 0.3
+        atmosphere_instance.Offset = 0.2
+        atmosphere_instance.Color = Color3.fromRGB(255, 225, 185)
+        atmosphere_instance.Decay = Color3.fromRGB(110, 85, 65)
+        atmosphere_instance.Glare = 0.4
+        atmosphere_instance.Haze = 2
+
+    elseif mode == "Midday (Vibrant Sun)" then
+        Lighting.ClockTime = 13.0
+        Lighting.Brightness = 4.0
+        Lighting.Ambient = Color3.fromRGB(60, 65, 80)
+        Lighting.OutdoorAmbient = Color3.fromRGB(180, 200, 230)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(20, 30, 50)
+        Lighting.ColorShift_Top = Color3.fromRGB(255, 255, 245)
+        Lighting.ExposureCompensation = 0.35
+        Lighting.GeographicLatitude = 10
+
+        atmosphere_instance = Instance.new("Atmosphere", Lighting)
+        atmosphere_instance.Density = 0.2
+        atmosphere_instance.Offset = 0
+        atmosphere_instance.Color = Color3.fromRGB(200, 220, 255)
+        atmosphere_instance.Decay = Color3.fromRGB(90, 120, 160)
+        atmosphere_instance.Glare = 0.4
+        atmosphere_instance.Haze = 1
+
+    elseif mode == "Afternoon (Golden Hour)" then
+        Lighting.ClockTime = 16.5
+        Lighting.Brightness = 3.6
+        Lighting.Ambient = Color3.fromRGB(70, 45, 35)
+        Lighting.OutdoorAmbient = Color3.fromRGB(220, 140, 70)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(70, 30, 15)
+        Lighting.ColorShift_Top = Color3.fromRGB(255, 180, 90)
+        Lighting.ExposureCompensation = 0.38
+        Lighting.GeographicLatitude = -15
+
+        atmosphere_instance = Instance.new("Atmosphere", Lighting)
+        atmosphere_instance.Density = 0.35
+        atmosphere_instance.Offset = 0.4
+        atmosphere_instance.Color = Color3.fromRGB(255, 150, 60)
+        atmosphere_instance.Decay = Color3.fromRGB(110, 50, 25)
+        atmosphere_instance.Glare = 0.7
+        atmosphere_instance.Haze = 3
+
+    elseif mode == "Sunset (Natural Warmth)" then
+        Lighting.ClockTime = 18.2
+        Lighting.Brightness = 3.4
+        Lighting.Ambient = Color3.fromRGB(65, 45, 40)
+        Lighting.OutdoorAmbient = Color3.fromRGB(210, 130, 85)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(50, 20, 20)
+        Lighting.ColorShift_Top = Color3.fromRGB(255, 170, 110)
+        Lighting.ExposureCompensation = 0.35
+        Lighting.GeographicLatitude = -50
+
+        atmosphere_instance = Instance.new("Atmosphere", Lighting)
+        atmosphere_instance.Density = 0.3
+        atmosphere_instance.Offset = 0.4
+        atmosphere_instance.Color = Color3.fromRGB(255, 160, 100)
+        atmosphere_instance.Decay = Color3.fromRGB(90, 50, 40)
+        atmosphere_instance.Glare = 0.6
+        atmosphere_instance.Haze = 3
+
+    elseif mode == "Night (Cool Moonlight)" then
+        Lighting.ClockTime = 0.0
+        Lighting.Brightness = 2.0
+        Lighting.Ambient = Color3.fromRGB(25, 35, 60)
+        Lighting.OutdoorAmbient = Color3.fromRGB(40, 70, 120)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(10, 20, 45)
+        Lighting.ColorShift_Top = Color3.fromRGB(130, 190, 255)
+        Lighting.ExposureCompensation = 0.5
+        Lighting.GeographicLatitude = 45
+
+        atmosphere_instance = Instance.new("Atmosphere", Lighting)
+        atmosphere_instance.Density = 0.4
+        atmosphere_instance.Offset = 0
+        atmosphere_instance.Color = Color3.fromRGB(30, 50, 90)
+        atmosphere_instance.Decay = Color3.fromRGB(15, 25, 50)
+        atmosphere_instance.Glare = 0.3
+        atmosphere_instance.Haze = 2
+
+        sky_instance = Instance.new("Sky", Lighting)
+        sky_instance.SkyboxBk = "rbxassetid://826027103"
+        sky_instance.SkyboxDn = "rbxassetid://826027117"
+        sky_instance.SkyboxFt = "rbxassetid://826027137"
+        sky_instance.SkyboxLf = "rbxassetid://826027161"
+        sky_instance.SkyboxRt = "rbxassetid://826027189"
+        sky_instance.SkyboxUp = "rbxassetid://826027228"
+
+    elseif mode == "Midnight (Pitch Black & Stars)" then
+        Lighting.ClockTime = 1.5
+        Lighting.Brightness = 1.2
+        Lighting.Ambient = Color3.fromRGB(10, 12, 20)
+        Lighting.OutdoorAmbient = Color3.fromRGB(15, 25, 45)
+        Lighting.ColorShift_Bottom = Color3.fromRGB(5, 8, 15)
+        Lighting.ColorShift_Top = Color3.fromRGB(80, 120, 200)
+        Lighting.ExposureCompensation = 0.2
+        Lighting.GeographicLatitude = 90
+
+        atmosphere_instance = Instance.new("Atmosphere", Lighting)
+        atmosphere_instance.Density = 0.6
+        atmosphere_instance.Offset = 0
+        atmosphere_instance.Color = Color3.fromRGB(10, 20, 40)
+        atmosphere_instance.Decay = Color3.fromRGB(5, 10, 20)
+        atmosphere_instance.Glare = 0.2
+        atmosphere_instance.Haze = 6
+
+        sky_instance = Instance.new("Sky", Lighting)
+        sky_instance.SkyboxBk = "rbxassetid://826027103"
+        sky_instance.SkyboxDn = "rbxassetid://826027117"
+        sky_instance.SkyboxFt = "rbxassetid://826027137"
+        sky_instance.SkyboxLf = "rbxassetid://826027161"
+        sky_instance.SkyboxRt = "rbxassetid://826027189"
+        sky_instance.SkyboxUp = "rbxassetid://826027228"
+    end
+end
+
+local function applyRTXPreset()
+    if not rtx_enabled then return end
+    
+    removeEffects(rtx_instances)
+
+    Lighting.Technology = Enum.Technology.Future
+    Lighting.GlobalShadows = true
+    Lighting.ShadowSoftness = 0.02
+    Lighting.EnvironmentDiffuseScale = 1.0  
+    Lighting.EnvironmentSpecularScale = 2.5 
+
+    if Terrain then
+        Terrain.WaterTransparency = 0.01
+        Terrain.WaterReflectance = 1.0
+        Terrain.WaterWaveSize = 0.25
+        Terrain.WaterWaveSpeed = 16
+    end
+
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level21
+    end)
+
+    -- INSANE HIGH BLOOM
+    local b = Instance.new("BloomEffect", Lighting)
+    b.Enabled = true
+    b.Intensity = 0.40
+    b.Size = 3500
+    b.Threshold = 0.65
+    table.insert(rtx_instances, b)
+
+    -- Color Correction Grading
+    local c = Instance.new("ColorCorrectionEffect", Lighting)
+    c.Brightness = 0.15
+    c.Contrast = 0.45
+    c.Saturation = 0.35
+    c.Enabled = true
+    c.TintColor = Color3.fromRGB(255, 245, 230)
+    table.insert(rtx_instances, c)
+
+    -- Cinematic Depth of Field
+    local d = Instance.new("DepthOfFieldEffect", Lighting)
+    d.Enabled = true
+    d.FarIntensity = 0.08
+    d.FocusDistance = 28.0
+    d.InFocusRadius = 20.0
+    d.NearIntensity = 0.15
+    table.insert(rtx_instances, d)
+
+    -- INSANE MAXIMUM SUNRAYS
+    local s = Instance.new("SunRaysEffect", Lighting)
+    s.Enabled = true
+    s.Intensity = 0.35
+    s.Spread = 0.85
+    table.insert(rtx_instances, s)
+end
+
+local custom_cc, custom_bloom, custom_rays
+
+local function removeCustomEffects()
+    if custom_cc then custom_cc:Destroy() custom_cc = nil end
+    if custom_bloom then custom_bloom:Destroy() custom_bloom = nil end
+    if custom_rays then custom_rays:Destroy() custom_rays = nil end
+end
+
+local function applyCustomGraphics()
+    if not custom_graphics_enabled then return end
+
+    if not custom_cc or not custom_cc.Parent then
+        custom_cc = Instance.new("ColorCorrectionEffect", Lighting)
+    end
+    custom_cc.Saturation = custom_saturation / 100
+    custom_cc.Contrast = custom_contrast / 100
+
+    if not custom_bloom or not custom_bloom.Parent then
+        custom_bloom = Instance.new("BloomEffect", Lighting)
+    end
+    custom_bloom.Intensity = custom_bloom_intensity
+    custom_bloom.Size = custom_bloom_size
+
+    if not custom_rays or not custom_rays.Parent then
+        custom_rays = Instance.new("SunRaysEffect", Lighting)
+    end
+    custom_rays.Intensity = custom_sunrays_intensity
+    custom_rays.Spread = 0.85
+end
+
+-- 1) MASTER RTX TOGGLE
+rtx_tab:AddToggle("Enable RTX (Ultra Realistic)", function(on)
+    rtx_enabled = on
+    if on then
+        applyRTXPreset()
+    else
+        Lighting.Technology = defaultLighting.Technology
+        Lighting.GlobalShadows = defaultLighting.GlobalShadows
+        Lighting.Brightness = defaultLighting.Brightness
+        Lighting.Ambient = defaultLighting.Ambient
+        Lighting.OutdoorAmbient = defaultLighting.OutdoorAmbient
+        Lighting.ColorShift_Bottom = defaultLighting.ColorShift_Bottom
+        Lighting.ColorShift_Top = defaultLighting.ColorShift_Top
+        Lighting.EnvironmentDiffuseScale = defaultLighting.EnvironmentDiffuseScale
+        Lighting.EnvironmentSpecularScale = defaultLighting.EnvironmentSpecularScale
+        Lighting.ShadowSoftness = defaultLighting.ShadowSoftness
+        Lighting.GeographicLatitude = defaultLighting.GeographicLatitude
+        Lighting.ExposureCompensation = defaultLighting.ExposureCompensation
+        Lighting.ClockTime = defaultLighting.ClockTime
+        
+        if Terrain then
+            Terrain.WaterTransparency = defaultLighting.WaterTransparency
+            Terrain.WaterReflectance = defaultLighting.WaterReflectance
+        end
+
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+        end)
+        
+        removeEffects(rtx_instances)
+    end
+end)
+
+-- 2) TIME OF DAY TOGGLE & DROPDOWN
+rtx_tab:AddToggle("Enable Custom Time of Day", function(on)
+    time_of_day_enabled = on
+    if on then
+        applyTimeOfDay(current_time_mode)
+    else
+        if atmosphere_instance then atmosphere_instance:Destroy() atmosphere_instance = nil end
+        if sky_instance then sky_instance:Destroy() sky_instance = nil end
+        Lighting.ClockTime = defaultLighting.ClockTime
+        Lighting.GeographicLatitude = defaultLighting.GeographicLatitude
+    end
+end)
+
+rtx_tab:AddDropdown("Time of Day Preset", {"Morning (Clean Golden)", "Midday (Vibrant Sun)", "Afternoon (Golden Hour)", "Sunset (Natural Warmth)", "Night (Cool Moonlight)", "Midnight (Pitch Black & Stars)"}, function(selected)
+    current_time_mode = selected
+    if time_of_day_enabled then
+        applyTimeOfDay(selected)
+    end
+end)
+
+-- 3) CUSTOM GRAPHICS TOGGLE
+rtx_tab:AddToggle("Enable Custom Graphics", function(on)
+    custom_graphics_enabled = on
+    if on then
+        applyCustomGraphics()
+    else
+        removeCustomEffects()
+    end
+end)
+
+-- Custom Graphics Sliders
+rtx_tab:AddSlider("Custom Brightness", 5, 40, custom_brightness, function(v)
+    custom_brightness = v
+    if custom_graphics_enabled then
+        Lighting.Brightness = v / 10
+    end
+end)
+
+rtx_tab:AddSlider("Custom Saturation", 0, 100, custom_saturation, function(v)
+    custom_saturation = v
+    if custom_graphics_enabled then applyCustomGraphics() end
+end)
+
+rtx_tab:AddSlider("Custom Contrast", 0, 100, custom_contrast, function(v)
+    custom_contrast = v
+    if custom_graphics_enabled then applyCustomGraphics() end
+end)
+
+rtx_tab:AddSlider("Bloom Intensity", 0, 100, math.floor(custom_bloom_intensity * 100), function(v)
+    custom_bloom_intensity = v / 100
+    if custom_graphics_enabled then applyCustomGraphics() end
+end)
+
+rtx_tab:AddSlider("SunRays Intensity", 0, 100, math.floor(custom_sunrays_intensity * 100), function(v)
+    custom_sunrays_intensity = v / 100
+    if custom_graphics_enabled then applyCustomGraphics() end
+end)
