@@ -365,5 +365,3 @@ skySection:AddButton("Apply Selected Skybox", function()
         end
     end
 end)
-
-skySection:AddLabel('Credits To: <font color="rgb(255,0,255)">not_.gato (@HeyyCaf) - Owner of the feature</font>')
