@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 -- =============================
@@ -9,24 +10,9 @@ local LocalPlayer = Players.LocalPlayer
 local overlayEnabled = false
 local overlayScale = 50
 local activeStats = {}
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
-local LocalPlayer = Players.LocalPlayer
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
-local LocalPlayer = Players.LocalPlayer
 
 -- Use your shared plugin object directly
-local overlayTab = odh_shared_plugins.AddSection("Performance Overlay") -- Create the Overlay tab
-
--- =============================
--- SETTINGS
--- =============================
-local overlayEnabled = false
-local overlayScale = 50
-local activeStats = {}
+local overlayTab = odh_shared_plugins.AddSection("Performance Overlay")
 
 -- =============================
 -- CREATE OVERLAY
@@ -66,9 +52,34 @@ end
 local fpsLabel = createLabel("FPS: 0")
 local pingLabel = createLabel("Ping: 0 ms")
 local playersLabel = createLabel("Players: 0")
+local regionLabel = createLabel("Region: Unknown")
+
+-- Fetch region / country using external IP lookup with flags and short country code
+local function getCountryFlag(countryCode)
+    local flag = ""
+    for i = 1, #countryCode do
+        local c = countryCode:sub(i, i)
+        flag = flag .. utf8.char(127397 + string.byte(c))
+    end
+    return flag
+end
+
+task.spawn(function()
+    local success, result = pcall(function()
+        local response = game:HttpGet("http://ip-api.com/json/?fields=countryCode")
+        return HttpService:JSONDecode(response)
+    end)
+    if success and result and result.countryCode then
+        local flag = getCountryFlag(result.countryCode)
+        regionLabel.Text = "Region: " .. flag .. " " .. result.countryCode:upper()
+        regionLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+    else
+        regionLabel.Text = "Region: 🌐 UN"
+    end
+end)
 
 local function updateOverlayLayout()
-    local scale = overlayScale / 50 -- smooth scaling factor
+    local scale = overlayScale / 50
     local yOffset = 0
     for _, lbl in ipairs(activeStats) do
         lbl.Position = UDim2.new(0,0,0,yOffset)
@@ -103,6 +114,7 @@ end
 overlayTab:AddToggle("Show FPS", function(on) toggleStat(fpsLabel, on) end)
 overlayTab:AddToggle("Show Ping", function(on) toggleStat(pingLabel, on) end)
 overlayTab:AddToggle("Show Players in Server", function(on) toggleStat(playersLabel, on) end)
+overlayTab:AddToggle("Show Region", function(on) toggleStat(regionLabel, on) end)
 
 overlayTab:AddSlider("Overlay Scale", 1, 100, overlayScale, function(v)
     overlayScale = v
@@ -150,6 +162,3 @@ RunService.RenderStepped:Connect(function(delta)
         playersLabel.TextColor3 = Color3.fromRGB(255,0,0) 
     end
 end)
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
