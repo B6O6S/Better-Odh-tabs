@@ -1,14 +1,23 @@
 --------------------------------------------------------------------------------
--- 3. Streamer Mode
+-- 3. Streamer Mode & Hide Executor (Combined)
 --------------------------------------------------------------------------------
 do
     local shared = odh_shared_plugins
     local CoreGui = game:GetService("CoreGui")
     local section = shared.AddSection("Streamer Mode")
+
     local enabled = false
+
+    -- Streamer Mode Variables
     local sConnections = {}
     local originals = setmetatable({}, { __mode = "k" })
 
+    -- Hide Executor Variables
+    local executorFolder = CoreGui:FindFirstChild("218592778d1caa348c8e88e7d1ee04e75b93e002ddea7d9270c85e7f9f348528")
+    local hConnections = {}
+    local hOriginals = setmetatable({}, { __mode = "k" })
+
+    -- Streamer Mode Functions
     local function GetUI()
         for _, inst in ipairs(CoreGui:GetDescendants()) do
             if inst.Name == "@bubbles.elia" then
@@ -79,26 +88,113 @@ do
 
     local function Apply()
         local ui = GetUI()
-        if not ui then
-            if shared.Notify then shared.Notify("UI not found.", 3) end
-            return
-        end
-        Hide(ui)
-        for _, obj in ipairs(ui:GetDescendants()) do Hide(obj) end
+        if ui then
+            Hide(ui)
+            for _, obj in ipairs(ui:GetDescendants()) do Hide(obj) end
 
-        local conn = ui.DescendantAdded:Connect(function(obj)
-            if enabled then Hide(obj) end
+            local conn = ui.DescendantAdded:Connect(function(obj)
+                if enabled then Hide(obj) end
+            end)
+            table.insert(sConnections, conn)
+        end
+    end
+
+    -- Hide Executor Functions
+    local function SaveProp(inst, prop)
+        local t = hOriginals[inst]
+        if not t then t = {}; hOriginals[inst] = t end
+        if t[prop] == nil then
+            local ok, value = pcall(function() return inst[prop] end)
+            if ok then t[prop] = value end
+        end
+    end
+
+    local function HideProps(inst)
+        if inst:IsA("LayerCollector") or inst:IsA("BillboardGui") or inst:IsA("SurfaceGui") then
+            SaveProp(inst, "Enabled"); inst.Enabled = false
+        end
+        if inst:IsA("GuiObject") then
+            SaveProp(inst, "BackgroundTransparency"); inst.BackgroundTransparency = 1
+            SaveProp(inst, "BorderSizePixel"); inst.BorderSizePixel = 0
+            SaveProp(inst, "Visible"); inst.Visible = false
+        end
+        if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
+            SaveProp(inst, "TextTransparency"); inst.TextTransparency = 1
+            SaveProp(inst, "TextStrokeTransparency"); inst.TextStrokeTransparency = 1
+            SaveProp(inst, "Text"); inst.Text = ""
+            SaveProp(inst, "Visible"); inst.Visible = false
+        end
+        if inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
+            SaveProp(inst, "ImageTransparency"); inst.ImageTransparency = 1
+            SaveProp(inst, "Image"); inst.Image = ""
+            SaveProp(inst, "AutoButtonColor"); inst.AutoButtonColor = false
+            SaveProp(inst, "Visible"); inst.Visible = false
+        end
+        if inst:IsA("Decal") or inst:IsA("Texture") then
+            SaveProp(inst, "Transparency"); inst.Transparency = 1
+            SaveProp(inst, "Texture"); inst.Texture = ""
+        end
+        if inst:IsA("UIStroke") then
+            SaveProp(inst, "Transparency"); inst.Transparency = 1
+        end
+        if inst:IsA("UIGradient") then
+            SaveProp(inst, "Transparency"); inst.Transparency = NumberSequence.new(1)
+        end
+        if inst:IsA("ScrollingFrame") then
+            SaveProp(inst, "ScrollBarImageTransparency"); inst.ScrollBarImageTransparency = 1
+        end
+    end
+
+    local function HideObj(inst)
+        HideProps(inst)
+        local conn = inst.Changed:Connect(function()
+            if enabled then HideProps(inst) end
         end)
-        table.insert(sConnections, conn)
+        table.insert(hConnections, conn)
+    end
+
+    local function RestoreExecutor()
+        for inst, props in pairs(hOriginals) do
+            if inst then
+                for prop, value in pairs(props) do
+                    pcall(function() inst[prop] = value end)
+                end
+            end
+        end
+        table.clear(hOriginals)
+        for _, conn in pairs(hConnections) do conn:Disconnect() end
+        table.clear(hConnections)
+    end
+
+    local function ApplyExecutorHide()
+        if executorFolder then
+            HideObj(executorFolder)
+            for _, obj in ipairs(executorFolder:GetDescendants()) do HideObj(obj) end
+
+            local conn = executorFolder.DescendantAdded:Connect(function(obj)
+                if enabled then HideObj(obj) end
+            end)
+            table.insert(hConnections, conn)
+        end
+    end
+
+    -- Combined Toggle & Keybind Actions
+    local function ToggleState(bool)
+        enabled = bool
+        if enabled then
+            Apply()
+            ApplyExecutorHide()
+        else
+            Restore()
+            RestoreExecutor()
+        end
     end
 
     section:AddToggle("Streamer Mode", function(bool)
-        enabled = bool
-        if enabled then Apply() else Restore() end
+        ToggleState(bool)
     end)
 
     section:AddKeybind("Unhide Keybind", "", function()
-        enabled = not enabled
-        if enabled then Apply() else Restore() end
+        ToggleState(not enabled)
     end)
 end
