@@ -13,6 +13,7 @@ local original_particle_states = {}
 local original_textures = {}
 local original_mesh_transparency = {}
 local original_accessories = {}
+local original_skies = {}
 local conns = {}
 
 -- =============================
@@ -29,7 +30,7 @@ local function isPlayerDescendant(obj)
 end
 
 local function applyMeshToObj(obj)
-    if isPlayerDescendant(obj) then return end -- skip player meshes
+    if isPlayerDescendant(obj) then return end
 
     if obj:IsA("MeshPart") then
         if original_mesh_transparency[obj] == nil then
@@ -75,7 +76,7 @@ local function setMeshes(on)
 end
 
 -- =============================
--- ACCESSORIES (unchanged)
+-- ACCESSORIES
 -- =============================
 local function setAccessories(on)
     if on then
@@ -119,8 +120,7 @@ local function setAccessories(on)
 end
 
 -- =============================
--- SMOOTH PLASTIC, PARTICLES, TEXTURES, SHADOWS, SKY
--- (same as before)
+-- PERFORMANCE TOGGLES
 -- =============================
 
 local function setSmoothPlastic(on)
@@ -210,12 +210,20 @@ end
 
 local function setShadows(on)
     Lighting.GlobalShadows = not on
-endlocal function setGraySky(on)
+end
+
+local function setGraySky(on)
     if on then
+        -- Save existing skies and disable them so we don't delete them permanently
         for _, obj in ipairs(Lighting:GetChildren()) do
-            obj:Destroy()
+            if obj:IsA("Sky") then
+                original_skies[obj] = obj.Parent
+                obj.Parent = nil -- safely unparent instead of destroying
+            end
         end
+        
         local sky = Instance.new("Sky")
+        sky.Name = "CustomGraySky"
         local assetId = "rbxassetid://99742693890881"
         sky.SkyboxBk = assetId
         sky.SkyboxDn = assetId
@@ -225,11 +233,18 @@ endlocal function setGraySky(on)
         sky.SkyboxUp = assetId
         sky.Parent = Lighting
     else
-        for _, obj in ipairs(Lighting:GetChildren()) do
-            if obj:IsA("Sky") then
-                obj:Destroy()
+        -- Remove our custom sky
+        local customSky = Lighting:FindFirstChild("CustomGraySky")
+        if customSky then
+            customSky:Destroy()
+        end
+        -- Restore original skies
+        for sky, parent in pairs(original_skies) do
+            if sky then
+                sky.Parent = parent
             end
         end
+        original_skies = {}
     end
 end
 
@@ -249,15 +264,3 @@ if perf_tab then
         if wd then wd:Destroy() end
     end)
 end
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
--- =============================
--- SERVICES
--- =============================
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
-
-local LocalPlayer = Players.LocalPlayer
