@@ -1,0 +1,240 @@
+local shared = odh_shared_plugins
+local custom_tab = shared.AddSection("Customizations")
+
+local Players     = game:GetService("Players")
+local Lighting    = game:GetService("Lighting")
+local UIS         = game:GetService("UserInputService")
+local RunService  = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera      = workspace.CurrentCamera
+
+-- =============================
+-- 1) MOTION BLUR
+-- =============================
+local blur = Lighting:FindFirstChildOfClass("BlurEffect") or Instance.new("BlurEffect")
+blur.Parent = Lighting
+blur.Size = 0
+
+local mb_enabled = false
+local lastCFrame = Camera.CFrame
+local lerpSpeed = 6
+local maxBlur = 8
+local minThreshold = 0.03
+
+custom_tab:AddToggle("Enable Motion Blur", function(on)
+    mb_enabled = on
+    if not on then blur.Size = 0 end
+end)
+
+custom_tab:AddSlider("Blur Strength", 1, 20, maxBlur, function(v)
+    maxBlur = v
+end)
+
+custom_tab:AddSlider("Blur Smoothness", 1, 15, lerpSpeed, function(v)
+    lerpSpeed = v
+end)
+
+RunService.RenderStepped:Connect(function(delta)
+    if not mb_enabled then return end
+
+    local lastLook = lastCFrame.LookVector
+    local currentLook = Camera.CFrame.LookVector
+    local dot = math.clamp(lastLook:Dot(currentLook), -1, 1)
+    local angle = math.acos(dot)
+
+    local target = 0
+    if angle > minThreshold then
+        target = math.clamp(angle / 0.04, 0, 1) * maxBlur
+    end
+
+    blur.Size = blur.Size + (target - blur.Size) * math.clamp(lerpSpeed * delta, 0, 1)
+    lastCFrame = Camera.CFrame
+end)
+
+-- =============================
+-- 2) JUMP BUTTON SIZE (FIXED)
+-- =============================
+local jb_enabled = false
+local jb_size    = 100
+
+local function findJumpButton()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return nil end
+
+    local tg = pg:FindFirstChild("TouchGui")
+    if not tg then return nil end
+
+    local tcf = tg:FindFirstChild("TouchControlFrame")
+    if tcf then
+        local jb = tcf:FindFirstChild("JumpButton", true)
+        if jb and (jb:IsA("ImageButton") or jb:IsA("TextButton")) then
+            return jb
+        end
+    end
+
+    for _, d in ipairs(tg:GetDescendants()) do
+        if d.Name == "JumpButton" and (d:IsA("ImageButton") or d:IsA("TextButton")) then
+            return d
+        end
+    end
+
+    return nil
+end
+
+local function setJumpButtonSize(px)
+    local jb = findJumpButton()
+    if not jb then return end
+
+    local screen = Camera.ViewportSize
+    local maxSize = math.min(screen.X, screen.Y) * 0.25
+    local clamped = math.clamp(px, 50, maxSize)
+
+    -- only update if different (optimization)
+    if jb.AbsoluteSize.X ~= clamped then
+        jb.Size = UDim2.new(0, clamped, 0, clamped)
+        jb.Position = UDim2.new(1, -clamped - 20, 1, -clamped - 20)
+    end
+end
+
+custom_tab:AddToggle("Jump Button Size Changer (Mobile & Tablet)", function(on)
+    jb_enabled = on
+end)
+
+custom_tab:AddSlider("Jump Button Size", 50, 125, jb_size, function(v)
+    jb_size = v
+end)
+
+-- 🔥 MAIN FIX: constantly enforce size
+RunService.RenderStepped:Connect(function()
+    if jb_enabled and UIS.TouchEnabled then
+        setJumpButtonSize(jb_size)
+    end
+end)
+
+-- =============================
+-- 3) TOOLS OUTLINE
+-- =============================
+local outline_enabled = false
+local outline_rainbow = false
+local tool_highlights = {}
+
+local colors = {
+    Black   = Color3.fromRGB(0,0,0),
+    White   = Color3.fromRGB(255,255,255),
+    Red     = Color3.fromRGB(255,0,0),
+    Blue    = Color3.fromRGB(0,0,255),
+    Pink    = Color3.fromRGB(255,105,180),
+    Magenta = Color3.fromRGB(255,0,255),
+    Purple  = Color3.fromRGB(128,0,128),
+    Orange  = Color3.fromRGB(255,165,0),
+    Green   = Color3.fromRGB(0,128,0),
+    Cyan    = Color3.fromRGB(0,255,255),
+    Yellow  = Color3.fromRGB(255,255,0),
+    Gold    = Color3.fromRGB(255,215,0),
+    Ocean   = Color3.fromRGB(0,128,255)
+}
+
+local selectedOutline = colors.Purple
+local selectedFill    = colors.Black
+
+local function ensureOutline(tool)
+    if not tool:IsA("Tool") then return end
+
+    local handle = tool:FindFirstChild("Handle")
+    if not handle or not handle:IsA("BasePart") then return end
+
+    handle.LocalTransparencyModifier = 0
+
+    local hl = tool:FindFirstChild("ToolOutline")
+    if not hl then
+        hl = Instance.new("Highlight")
+        hl.Name = "ToolOutline"
+        hl.Adornee = handle
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.FillTransparency = 0.8
+        hl.OutlineTransparency = 0.8
+        hl.Parent = tool
+    end
+
+    hl.Enabled = outline_enabled
+    hl.OutlineColor = selectedOutline
+    hl.FillColor = selectedFill
+
+    tool_highlights[tool] = hl
+end
+
+local function applyOutlineToAllTools()
+    tool_highlights = {}
+
+    for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        ensureOutline(t)
+    end
+
+    local char = LocalPlayer.Character
+    if char then
+        for _, t in ipairs(char:GetChildren()) do
+            ensureOutline(t)
+        end
+    end
+end
+
+local function removeOutlines()
+    for tool, hl in pairs(tool_highlights) do
+        if hl then hl:Destroy() end
+        if tool and tool:FindFirstChild("Handle") then
+            tool.Handle.LocalTransparencyModifier = 0.5
+        end
+    end
+    tool_highlights = {}
+end
+
+custom_tab:AddToggle("Enable Tool Outline Theme", function(on)
+    outline_enabled = on
+    if on then applyOutlineToAllTools() else removeOutlines() end
+end)
+
+local colorNames = {}
+for name,_ in pairs(colors) do table.insert(colorNames,name) end
+
+custom_tab:AddDropdown("Outline Color", colorNames, function(selected)
+    selectedOutline = colors[selected]
+    for _, hl in pairs(tool_highlights) do
+        if hl then hl.OutlineColor = selectedOutline end
+    end
+end)
+
+custom_tab:AddDropdown("Fill Color", colorNames, function(selected)
+    selectedFill = colors[selected]
+    for _, hl in pairs(tool_highlights) do
+        if hl then hl.FillColor = selectedFill end
+    end
+end)
+
+custom_tab:AddToggle("Rainbow Outline", function(on)
+    outline_rainbow = on
+end)
+
+local hue = 0
+RunService.RenderStepped:Connect(function()
+    if not outline_rainbow then return end
+
+    hue = (hue + 0.5) % 360
+    local color = Color3.fromHSV(hue/360, 1, 1)
+
+    for _, hl in pairs(tool_highlights) do
+        if hl then
+            hl.OutlineColor = color
+            hl.FillColor = color
+        end
+    end
+end)
+
+LocalPlayer.Backpack.ChildAdded:Connect(function(obj)
+    if outline_enabled then ensureOutline(obj) end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    if outline_enabled then
+        task.defer(applyOutlineToAllTools)
+    end
+end)
