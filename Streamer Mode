@@ -198,3 +198,5 @@ do
         ToggleState(not enabled)
     end)
 end
+
+section:AddLabel("⚠️ To hide Delta enable the streamer Mode and open Delta!")
