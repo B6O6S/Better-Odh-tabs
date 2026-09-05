@@ -1,0 +1,276 @@
+-- =============================
+-- TRICKSHOT & MOVEMENT TAB
+-- =============================
+local trickTab = odh_shared_plugins.AddSection("Trickshot & Movement")
+
+-- =============================
+-- SETTINGS
+-- =============================
+local trickshotEnabled = false -- 360 spin
+local strafeEnabled = false
+local strafeSpeed = 16
+local spinSpeed = math.rad(15) -- radians per frame
+local spinning = false
+local strafeDirection = 1 -- 1 = right, -1 = left
+
+-- =============================
+-- JUMP BOOST SETTINGS
+-- =============================
+local jumpBoostEnabled = false
+local jumpBoostSize = 50
+local jump360Enabled = false
+local jump360Size = 100
+local screenGuiJump, screenGui360
+local buttonJump, button360
+local humanoid
+local boosted = false
+local originalJumpPower = 50
+local spinOnNextJump = false
+
+-- =============================
+-- HUMANOID SETUP
+-- =============================
+local function setupHumanoid(h)
+    humanoid = h
+    originalJumpPower = humanoid.JumpPower
+    boosted = false
+
+    humanoid:GetPropertyChangedSignal("Jump"):Connect(function()
+        if boosted and humanoid.Jump then
+            task.wait(0.1)
+            humanoid.JumpPower = originalJumpPower
+            boosted = false
+        end
+        if jump360Enabled and spinOnNextJump and humanoid.Jump then
+            local HRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if HRP then
+                local totalSpin = math.rad(360)
+                local steps = 30
+                local stepAngle = totalSpin / steps
+                local stepTime = 0.01
+                for i = 1, steps do
+                    HRP.CFrame = HRP.CFrame * CFrame.Angles(0, stepAngle * (spinSpeed / math.rad(15)), 0)
+                    task.wait(stepTime)
+                end
+                spinOnNextJump = false
+            end
+        end
+    end)
+end
+
+local function onCharacterAdded(char)
+    local hum = char:WaitForChild("Humanoid")
+    setupHumanoid(hum)
+end
+
+if LocalPlayer.Character then
+    onCharacterAdded(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- =============================
+-- JUMP BOOST BUTTON
+-- =============================
+local function setupJumpButton()
+    if screenGuiJump then screenGuiJump:Destroy() end
+    screenGuiJump = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    screenGuiJump.ResetOnSpawn = false
+
+    buttonJump = Instance.new("TextButton")
+    buttonJump.Size = UDim2.new(0, jumpBoostSize, 0, jumpBoostSize)
+    buttonJump.Position = UDim2.new(0.5, -jumpBoostSize/2, 0.5, -jumpBoostSize/2)
+    buttonJump.Text = "Jump Boost"
+    buttonJump.BackgroundColor3 = Color3.new(0, 0, 0)
+    buttonJump.TextColor3 = Color3.new(1, 1, 1)
+    buttonJump.Font = Enum.Font.Arcade
+    buttonJump.TextSize = 18
+    buttonJump.Active = true
+    buttonJump.Draggable = true
+    buttonJump.Parent = screenGuiJump
+
+    buttonJump.MouseButton1Click:Connect(function()
+        if humanoid and not boosted then
+            originalJumpPower = humanoid.JumpPower
+            humanoid.JumpPower = 125
+            boosted = true
+        end
+    end)
+end
+
+-- =============================
+-- 360 Jump Button
+-- =============================
+local function setup360Button()
+    if screenGui360 then screenGui360:Destroy() end
+    screenGui360 = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    screenGui360.ResetOnSpawn = false
+
+    button360 = Instance.new("TextButton")
+    button360.Size = UDim2.new(0, jump360Size, 0, jump360Size)
+    button360.Position = UDim2.new(0.5, -jump360Size/2, 0.5, -jump360Size/2)
+    button360.Text = "360 Jump"
+    button360.BackgroundColor3 = Color3.new(0, 0, 0)
+    button360.TextColor3 = Color3.new(1, 1, 1)
+    button360.Font = Enum.Font.Arcade
+    button360.TextSize = 18
+    button360.Active = true
+    button360.Draggable = true
+    button360.Parent = screenGui360
+
+    button360.MouseButton1Click:Connect(function()
+        spinOnNextJump = true -- will spin on next jump only
+    end)
+end
+
+-- =============================
+-- PLUGIN TOGGLES & SLIDERS
+-- =============================
+trickTab:AddToggle("Enable Automatic 360 Trickshot", function(on)
+    trickshotEnabled = on
+end)
+
+trickTab:AddToggle("Enable Automatic Strafe", function(on)
+    strafeEnabled = on
+end)
+
+trickTab:AddSlider("Strafe Speed", 4, 32, strafeSpeed, function(v)
+    strafeSpeed = v
+end)
+
+trickTab:AddSlider("360 Spin Speed", 1, 50, math.deg(spinSpeed), function(v)
+    spinSpeed = math.rad(v)
+end)
+
+trickTab:AddToggle("Enable Jump Boost Button", function(on)
+    jumpBoostEnabled = on
+    if on then
+        setupJumpButton()
+    elseif screenGuiJump then
+        screenGuiJump:Destroy()
+        screenGuiJump = nil
+    end
+end)
+
+trickTab:AddSlider("Jump Boost Button Size", 20, 150, jumpBoostSize, function(v)
+    jumpBoostSize = v
+    if buttonJump then
+        buttonJump.Size = UDim2.new(0, jumpBoostSize, 0, jumpBoostSize)
+        buttonJump.Position = UDim2.new(0.5, -jumpBoostSize/2, 0.5, -jumpBoostSize/2)
+    end
+end)
+
+trickTab:AddToggle("Enable 360 Jump Button", function(on)
+    jump360Enabled = on
+    if on then
+        setup360Button()
+    elseif screenGui360 then
+        screenGui360:Destroy()
+        screenGui360 = nil
+    end
+end)
+
+trickTab:AddSlider("360 Jump Button Size", 50, 200, jump360Size, function(v)
+    jump360Size = v
+    if button360 then
+        button360.Size = UDim2.new(0, jump360Size, 0, jump360Size)
+        button360.Position = UDim2.new(0.5, -jump360Size/2, 0.5, -jump360Size/2)
+    end
+end)
+-- =============================
+-- APPLY MOVEMENTS
+-- =============================
+RunService.RenderStepped:Connect(function(delta)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local HRP = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not HRP or not humanoid then return end
+
+    -- Automatic strafe
+    if strafeEnabled then
+        local moveVec = HRP.CFrame.RightVector * strafeDirection
+        HRP.CFrame = HRP.CFrame + moveVec.Unit * strafeSpeed * delta
+        if tick() % 1 < 0.5 then
+            strafeDirection = 1
+        else
+            strafeDirection = -1
+        end
+    end
+
+    -- Automatic 360 trickshot
+    if trickshotEnabled then
+        if humanoid:GetState() == Enum.HumanoidStateType.Freefall then
+            spinning = true
+        elseif spinning and humanoid:GetState() == Enum.HumanoidStateType.Landed then
+            spinning = false
+        end
+
+        if spinning then
+            HRP.CFrame = HRP.CFrame * CFrame.Angles(0, spinSpeed, 0)
+        end
+    end
+end)
+
+-- =============================
+-- WALLHOP FEATURE
+-- =============================
+local wallhopEnabled = false
+local InfiniteJumpEnabled = true
+local wallRaycastParams = RaycastParams.new()
+wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+local function getWallRaycastResult()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    wallRaycastParams.FilterDescendantsInstances = {character}
+    local closestHit, minDistance = nil, 3
+    local hrpCF = hrp.CFrame
+    for i = 0,7 do
+        local angle = math.rad(i*45)
+        local dir = (hrpCF*CFrame.Angles(0,angle,0)).LookVector
+        local ray = Workspace:Raycast(hrp.Position, dir*2, wallRaycastParams)
+        if ray and ray.Instance and ray.Distance < minDistance then
+            minDistance = ray.Distance
+            closestHit = ray
+        end
+    end
+    return closestHit
+end
+
+local function performWallhop()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
+    local wall = getWallRaycastResult()
+    if not wall then return end
+
+    rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + wall.Normal)
+    RunService.Heartbeat:Wait()
+    if humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        task.wait(0.1)
+    end
+end
+
+trickTab:AddToggle("Enable Wallhop", function(on)
+    wallhopEnabled = on
+end)
+
+trickTab:AddKeybind("Wallhop Jump Key", "J", performWallhop)
+
+UserInputService.JumpRequest:Connect(function()
+    if wallhopEnabled and InfiniteJumpEnabled then
+        performWallhop()
+    end
+
+end)
+
+trickTab:AddLabel('Credits To: <font color="rgb(255,0,255)">not_.gato (@HeyyCaf) - Owner of the feature</font>')
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
