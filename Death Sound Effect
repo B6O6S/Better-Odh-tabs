@@ -18,7 +18,7 @@ local sounds = {
 local selectedSoundId = "rbxassetid://126753086907254"
 local customEnabled = false
 local customTextboxId = nil
-local lastSelected = "Arab dad fart"
+local lastSelected = "OOUUGGHH"
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
