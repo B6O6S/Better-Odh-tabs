@@ -1,6 +1,8 @@
+local shared = odh_shared_plugins  
+
 -- Create a new section  
 local gunEffectSection = shared.AddSection("CODM Guns")  
-gunEffectSection:AddLabel("⚠️ It's only work on godly guns")  
+section:AddLabel("⚠️ It's only work on godly guns")
 local Players = game:GetService("Players")  
 local Workspace = game:GetService("Workspace")  
 local RunService = game:GetService("RunService")  
@@ -388,8 +390,7 @@ loadHSO = function()
         end)  
         table.insert(connections, renderConn)  
     end  
-
-    local function watchLocalContainer(container)  
+local function watchLocalContainer(container)  
         if not container then return end  
         local function checkItem(obj)  
             if isGunTool(obj) then  
@@ -651,6 +652,8 @@ loadLocus = function()
             part.Anchored = true  
             part.CanCollide = false  
             part.CanTouch = false  
+            local function createImage(name, imageId)  
+            end  
             part.CanQuery = false  
             part.CastShadow = false  
             part.Parent = Workspace  
@@ -720,12 +723,14 @@ end
 -- Global Auto-Refresh Listener for Respawn / Tool Pickups
 player.CharacterAdded:Connect(function(newChar)
     task.spawn(function()
+        -- Wait a short moment for backpack and character tools to load on respawn
         task.wait(0.5)
         if customEnabled and activeMode then
             cleanup()
             triggerActiveMode()
         end
         
+        -- Watch backpack changes dynamically for new tool additions
         local bp = player:FindFirstChild("Backpack")
         if bp then
             bp.DescendantAdded:Connect(function(obj)
@@ -745,6 +750,7 @@ player.CharacterAdded:Connect(function(newChar)
     end)
 end)
 
+-- Also monitor existing backpack for items added anytime
 local initialBp = player:FindFirstChild("Backpack")
 if initialBp then
     initialBp.DescendantAdded:Connect(function(obj)
@@ -771,7 +777,7 @@ gunEffectSection:AddToggle("Toggle codm gun", function(bool)
     if bool then  
         triggerActiveMode()  
     else  
-    	cleanup()  
+        cleanup()  
         activeMode = nil  
     end  
 end)  
