@@ -6,7 +6,7 @@ local jukeSoundSection = shared.AddSection("Death Sound Effect")
 -- Sound options (default first)
 local sounds = {
     "Arab dad fart|126753086907254",
-    "iraqi kid "wow" *fart*|107988548317949",
+    "iraqi kid (wow) *fart*|107988548317949",
     "يلعن ابو لعبك (3RQ)|89850487492275",
     "عجيب والله (B6O6S)|131846507499000",
     "OOUUGGHH|97843302606905",
