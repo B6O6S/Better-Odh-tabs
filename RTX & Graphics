@@ -259,10 +259,17 @@ local function removeCustomEffects()
     if custom_cc then custom_cc:Destroy() custom_cc = nil end
     if custom_bloom then custom_bloom:Destroy() custom_bloom = nil end
     if custom_rays then custom_rays:Destroy() custom_rays = nil end
+    
+    -- Reset lighting settings affected by custom graphics sliders
+    Lighting.Brightness = defaultLighting.Brightness
+    Lighting.EnvironmentSpecularScale = defaultLighting.EnvironmentSpecularScale
 end
 
 local function applyCustomGraphics()
     if not custom_graphics_enabled then return end
+
+    Lighting.Brightness = custom_brightness / 10
+    Lighting.EnvironmentSpecularScale = custom_reflections
 
     if not custom_cc or not custom_cc.Parent then
         custom_cc = Instance.new("ColorCorrectionEffect", Lighting)
@@ -382,5 +389,7 @@ end)
 
 rtx_tab:AddSlider("Reflections Intensity", 0, 50, math.floor(custom_reflections * 10), function(v)
     custom_reflections = v / 10
-    Lighting.EnvironmentSpecularScale = custom_reflections
+    if custom_graphics_enabled then
+        Lighting.EnvironmentSpecularScale = custom_reflections
+    end
 end)
