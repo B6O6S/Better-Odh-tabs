@@ -1,0 +1,105 @@
+local shared = odh_shared_plugins
+
+-- Create a new section
+local jukeSoundSection = shared.AddSection("Death Sound Effect")
+
+-- Sound options (default first)
+local sounds = {
+    "Ankle break|116630605163027",
+    "Where are you going|140099088033128",
+    "Please Speed i need this|96825144718073",
+    "بالراحة (B6O6S)|90233621241303",
+    "بسم الله عليك (B6O6S)|109098054743197",
+    "عجيب والله (B6O6S)|131846507499000",
+    "Meow|7148585764",
+    "Bruh|6349641063",
+    "Fart|8551016315",
+    "Custom|0" -- Placeholder for textbox input
+}
+
+local selectedSoundId = "rbxassetid://116630605163027" -- default selected
+local customEnabled = false
+local customTextboxId = nil -- Store user input for custom ID
+local lastSelected = "Ankle break" -- Track dropdown selection
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local hasPlayedDeathSound = false
+local lastCharacter = nil
+
+-- Function to play the death audio
+local function playDeathSound()
+    if not selectedSoundId or not customEnabled then return end
+    
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = selectedSoundId
+    soundObj.Volume = 1
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Destroy()
+end
+
+-- Function to setup death detection on the current character
+local function setupCharacter(char)
+    hasPlayedDeathSound = false
+    lastCharacter = char
+    
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid.Died:Connect(function()
+            if customEnabled and not hasPlayedDeathSound then
+                hasPlayedDeathSound = true
+                playDeathSound()
+            end
+        end)
+    end
+end
+
+if LocalPlayer.Character then
+    setupCharacter(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+
+-- Toggle for enabling/disabling death sound
+jukeSoundSection:AddToggle("Enable Death Sound", function(bool)
+    customEnabled = bool
+    hasPlayedDeathSound = false
+end)
+
+-- TextBox for custom SoundId
+jukeSoundSection:AddTextBox("Custom SoundId", function(text)
+    if text and text ~= "" then
+        if not string.find(text, "rbxassetid://") then
+            customTextboxId = "rbxassetid://" .. text
+        else
+            customTextboxId = text
+        end
+        if lastSelected == "Custom" then
+            selectedSoundId = customTextboxId
+        end
+    end
+end)
+
+-- Dropdown to select the sound
+local dropdownOptions = {}
+for _, data in ipairs(sounds) do
+    local name = string.match(data, "(.-)|%d+")
+    table.insert(dropdownOptions, name)
+end
+
+jukeSoundSection:AddDropdown("Select Death Sound", dropdownOptions, function(selected)
+    lastSelected = selected
+    if selected == "Custom" then
+        selectedSoundId = customTextboxId
+    else
+        for _, data in ipairs(sounds) do
+            local name, id = string.match(data, "(.-)|(%d+)")
+            if name == selected then
+                selectedSoundId = "rbxassetid://" .. id
+                break
+            end
+        end
+    end
+end)
