@@ -2,7 +2,7 @@ local shared = odh_shared_plugins
 
 -- Create a new section  
 local gunEffectSection = shared.AddSection("CODM Guns")  
-gunEffectsection:AddLabel("⚠️ It's only work on godly guns")
+gunEffectSection:AddLabel("⚠️ It's only work on godly guns")
 local Players = game:GetService("Players")  
 local Workspace = game:GetService("Workspace")  
 local RunService = game:GetService("RunService")  
