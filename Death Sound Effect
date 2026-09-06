@@ -6,7 +6,7 @@ local jukeSoundSection = shared.AddSection("Death Sound Effect")
 -- Sound options (default first)
 local sounds = {
     "Arab dad fart|126753086907254",
-    "iraqi kid (wow) *fart*|107988548317949",
+    "iraqi kid \"wow\" *fart*|107988548317949",
     "يلعن ابو لعبك (3RQ)|89850487492275",
     "عجيب والله (B6O6S)|131846507499000",
     "OOUUGGHH|97843302606905",
@@ -15,10 +15,10 @@ local sounds = {
     "Custom|0" -- Placeholder for textbox input
 }
 
-local selectedSoundId = "rbxassetid://116630605163027" -- default selected
+local selectedSoundId = "rbxassetid://126753086907254"
 local customEnabled = false
-local customTextboxId = nil -- Store user input for custom ID
-local lastSelected = "Ankle break" -- Track dropdown selection
+local customTextboxId = nil
+local lastSelected = "Arab dad fart"
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -26,10 +26,32 @@ local LocalPlayer = Players.LocalPlayer
 local hasPlayedDeathSound = false
 local lastCharacter = nil
 
--- Function to play the death audio
-local function playDeathSound()
+-- Function to play custom sound and mute/remove Roblox default death sound
+local function playDeathSound(char)
     if not selectedSoundId or not customEnabled then return end
     
+    -- Mute/remove default death sound inside character head or Humanoid
+    local head = char:FindFirstChild("Head")
+    if head then
+        for _, obj in ipairs(head:GetChildren()) do
+            if obj:IsA("Sound") then
+                obj.Volume = 0
+                obj.SoundId = ""
+            end
+        end
+    end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        for _, obj in ipairs(humanoid:GetChildren()) do
+            if obj:IsA("Sound") then
+                obj.Volume = 0
+                obj.SoundId = ""
+            end
+        end
+    end
+
+    -- Play custom sound
     local soundObj = Instance.new("Sound")
     soundObj.SoundId = selectedSoundId
     soundObj.Volume = 1
@@ -43,12 +65,31 @@ local function setupCharacter(char)
     hasPlayedDeathSound = false
     lastCharacter = char
     
+    -- Continuously clear default death sound as soon as character spawns
+    task.spawn(function()
+        local head = char:WaitForChild("Head", 5)
+        if head then
+            for _, obj in ipairs(head:GetChildren()) do
+                if obj:IsA("Sound") then
+                    obj.Volume = 0
+                    obj.SoundId = ""
+                end
+            end
+            head.ChildAdded:Connect(function(obj)
+                if obj:IsA("Sound") then
+                    obj.Volume = 0
+                    obj.SoundId = ""
+                end
+            end)
+        end
+    end)
+
     local humanoid = char:WaitForChild("Humanoid", 5)
     if humanoid then
         humanoid.Died:Connect(function()
             if customEnabled and not hasPlayedDeathSound then
                 hasPlayedDeathSound = true
-                playDeathSound()
+                playDeathSound(char)
             end
         end)
     end
