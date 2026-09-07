@@ -86,8 +86,27 @@ local function setupCharacter(char)
 
     local humanoid = char:WaitForChild("Humanoid", 5)
     if humanoid then
+        -- Method 1: Standard Humanoid.Died event
         humanoid.Died:Connect(function()
             if customEnabled and not hasPlayedDeathSound then
+                hasPlayedDeathSound = true
+                playDeathSound(char)
+            end
+        end)
+
+        -- Method 2: Health-based fallback for custom death systems
+        humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+            if humanoid.Health <= 0 and customEnabled and not hasPlayedDeathSound then
+                hasPlayedDeathSound = true
+                playDeathSound(char)
+            end
+        end)
+    end
+
+    -- Method 3: State-based fallback for custom death/ragdoll systems
+    if humanoid then
+        humanoid.StateChanged:Connect(function(_, newState)
+            if (newState == Enum.HumanoidStateType.Dead or newState == Enum.HumanoidStateType.Ragdoll) and customEnabled and not hasPlayedDeathSound then
                 hasPlayedDeathSound = true
                 playDeathSound(char)
             end
