@@ -19,10 +19,16 @@ local sounds = {
     "Custom|0" -- Placeholder for textbox input
 }
 
-local selectedSoundId = "rbxassetid://10209803" -- default selected
-local customEnabled = false
-local customTextboxId = nil -- Store user input for custom ID
-local lastSelected = "Default" -- Track dropdown selection
+-- Use getgenv() to save the choice across script re-executions
+getgenv().GunSound_SavedId = getgenv().GunSound_SavedId or "rbxassetid://10209803"
+getgenv().GunSound_SavedName = getgenv().GunSound_SavedName or "Default"
+getgenv().GunSound_CustomId = getgenv().GunSound_CustomId or nil
+getgenv().GunSound_Enabled = getgenv().GunSound_Enabled or false
+
+local selectedSoundId = getgenv().GunSound_SavedId
+local customEnabled = getgenv().GunSound_Enabled
+local customTextboxId = getgenv().GunSound_CustomId
+local lastSelected = getgenv().GunSound_SavedName
 local connections = {}
 
 local Players = game:GetService("Players")
@@ -73,6 +79,7 @@ end)
 -- Toggle for enabling/disabling custom sounds
 gunSoundSection:AddToggle("Enable Custom Sound", function(bool)
     customEnabled = bool
+    getgenv().GunSound_Enabled = bool -- Save toggle state
     if bool then
         applySounds()
     end
@@ -86,9 +93,13 @@ gunSoundSection:AddTextBox("Custom SoundId", function(text)
         else
             customTextboxId = text
         end
+        
+        getgenv().GunSound_CustomId = customTextboxId -- Save custom text
+        
         -- If the last selected dropdown option is Custom, update immediately
         if lastSelected == "Custom" then
             selectedSoundId = customTextboxId
+            getgenv().GunSound_SavedId = selectedSoundId
             applySounds()
         end
     end
@@ -102,7 +113,9 @@ for _, data in ipairs(sounds) do
 end
 
 local dropdown = gunSoundSection:AddDropdown("Select Sound", dropdownOptions, function(selected)
-    lastSelected = selected -- track selection
+    lastSelected = selected 
+    getgenv().GunSound_SavedName = selected -- Save name selection
+    
     if selected == "Custom" then
         selectedSoundId = customTextboxId -- may be nil until user types
     else
@@ -114,9 +127,14 @@ local dropdown = gunSoundSection:AddDropdown("Select Sound", dropdownOptions, fu
             end
         end
     end
-    applySounds() -- Apply immediately when changed
+    
+    getgenv().GunSound_SavedId = selectedSoundId -- Save final ID
+    applySounds() 
 end)
 
--- Set initial dropdown selection to Default
-
-dropdown.Select("Default")
+-- Initialize dropdown with the last saved selection instead of forcing "Default"
+if dropdown and dropdown.Select then
+    pcall(function()
+        dropdown.Select(getgenv().GunSound_SavedName)
+    end)
+end
