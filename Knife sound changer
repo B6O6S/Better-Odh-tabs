@@ -27,10 +27,16 @@ do
         "Custom|0"  
     }  
 
-    local selectedSoundId = "rbxassetid://142247768"
-    local customEnabled = false  
-    local customTextboxId = nil  
-    local lastSelected = "Default"  
+    -- Use getgenv() to save the choice across script re-executions
+    getgenv().KnifeSound_SavedId = getgenv().KnifeSound_SavedId or "rbxassetid://142247768"
+    getgenv().KnifeSound_SavedName = getgenv().KnifeSound_SavedName or "Default"
+    getgenv().KnifeSound_CustomId = getgenv().KnifeSound_CustomId or nil
+    getgenv().KnifeSound_Enabled = getgenv().KnifeSound_Enabled or false
+
+    local selectedSoundId = getgenv().KnifeSound_SavedId
+    local customEnabled = getgenv().KnifeSound_Enabled  
+    local customTextboxId = getgenv().KnifeSound_CustomId  
+    local lastSelected = getgenv().KnifeSound_SavedName  
     local connections = {}  
 
     local function layerSound(origSound)  
@@ -74,6 +80,7 @@ do
 
     knifeSoundSection:AddToggle("Enable Custom Knife Sound", function(bool)  
         customEnabled = bool  
+        getgenv().KnifeSound_Enabled = bool  
         if bool then applySounds() end  
     end)  
 
@@ -85,8 +92,11 @@ do
                 customTextboxId = text  
             end  
 
+            getgenv().KnifeSound_CustomId = customTextboxId  
+
             if lastSelected == "Custom" then  
                 selectedSoundId = customTextboxId  
+                getgenv().KnifeSound_SavedId = selectedSoundId  
                 applySounds()  
             end  
         end  
@@ -100,6 +110,8 @@ do
 
     local dropdown = knifeSoundSection:AddDropdown("Select Sound", dropdownOptions, function(selected)  
         lastSelected = selected  
+        getgenv().KnifeSound_SavedName = selected  
+
         if selected == "Custom" then  
             selectedSoundId = customTextboxId  
         else  
@@ -111,8 +123,14 @@ do
                 end  
             end  
         end  
+
+        getgenv().KnifeSound_SavedId = selectedSoundId  
         applySounds()  
     end)  
 
-    pcall(function() dropdown.Select("Default") end)
+    pcall(function() 
+        if dropdown and dropdown.Select then
+            dropdown.Select(getgenv().KnifeSound_SavedName) 
+        end
+    end)
 end
