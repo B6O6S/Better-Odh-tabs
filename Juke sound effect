@@ -1,6 +1,15 @@
+-- =============================
+-- SERVICES & CORE VARIABLES
+-- =============================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
 local shared = odh_shared_plugins
 
--- Create a new section
+-- =============================
+-- JUKE SOUND SECTION
+-- =============================
 local jukeSoundSection = shared.AddSection("Juke Sound effect")
 
 -- Sound options ordered normally, with new options included and Custom at the very end
@@ -35,11 +44,6 @@ local lastSelected = getgenv().JukeSound_SavedName
 local JUKE_DISTANCE = getgenv().JukeSound_Distance
 local soundVolume = getgenv().JukeSound_Volume
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer = Players.LocalPlayer
-
 local roles
 local Murder
 local hasPlayedJuke = false
@@ -64,6 +68,10 @@ end
 -- Function to check distance to the murderer
 local function checkJuke()
     if not customEnabled or not Murder then return end
+    
+    -- Prevent juke sound from playing if the local player is the murderer
+    if Murder == LocalPlayer.Name then return end
+
     local murdererPlayer = Players:FindFirstChild(Murder)
     
     if murdererPlayer and murdererPlayer.Character and murdererPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
