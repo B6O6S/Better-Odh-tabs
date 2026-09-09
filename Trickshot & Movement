@@ -4,7 +4,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Stats = game:GetService("Stats")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
@@ -226,48 +226,63 @@ end)
 -- WALLHOP FEATURE
 -- =============================
 local wallhopEnabled = false
+local backToNormalEnabled = false
+local selectedLookDirection = "Back"
 local InfiniteJumpEnabled = true
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
 
-local function getWallRaycastResult()
-    local character = LocalPlayer.Character
-    if not character then return nil end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    wallRaycastParams.FilterDescendantsInstances = {character}
-    local closestHit, minDistance = nil, 3
-    local hrpCF = hrp.CFrame
-    for i = 0,7 do
-        local angle = math.rad(i*45)
-        local dir = (hrpCF*CFrame.Angles(0,angle,0)).LookVector
-        local ray = Workspace:Raycast(hrp.Position, dir*2, wallRaycastParams)
-        if ray and ray.Instance and ray.Distance < minDistance then
-            minDistance = ray.Distance
-            closestHit = ray
-        end
-    end
-    return closestHit
-end
-
 local function performWallhop()
     local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-    if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
-    local wall = getWallRaycastResult()
-    if not wall then return end
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not hrp or not humanoid or humanoid:GetState() == Enum.HumanoidStateType.Dead then return end
 
-    rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + wall.Normal)
-    RunService.Heartbeat:Wait()
-    if humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    wallRaycastParams.FilterDescendantsInstances = {character}
+    local raycastResult = Workspace:Raycast(hrp.Position, hrp.CFrame.LookVector * 3, wallRaycastParams)
+
+    if raycastResult then
+        InfiniteJumpEnabled = false
+
+        -- 1. Jump and smoothly angle using CFrame multiplication like your working script
+        humanoid:ChangeState("Jumping")
+        
+        if backToNormalEnabled then
+            -- Initial rotation snap based on dropdown selection
+            if selectedLookDirection == "Back" then
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.pi, 0)
+            elseif selectedLookDirection == "Right" then
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, -math.pi/2, 0)
+            elseif selectedLookDirection == "Left" then
+                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.pi/2, 0)
+            end
+
+            task.wait(0.15)
+            
+            -- Smoothly tween or snap back to normal original orientation smoothly
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, (selectedLookDirection == "Back" and math.pi or (selectedLookDirection == "Right" and math.pi/2 or -math.pi/2)), 0)
+        else
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, -1, 0)
+            task.wait(0.1)
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, 1, 0)
+        end
+
         task.wait(0.1)
+        InfiniteJumpEnabled = true
     end
 end
 
 trickTab:AddToggle("Enable Wallhop", function(on)
     wallhopEnabled = on
+end)
+
+trickTab:AddToggle("Back To Normal position after jump", function(on)
+    backToNormalEnabled = on
+end)
+
+trickTab:AddDropdown("Wallhop Look Direction", {"Back", "Right", "Left"}, function(selected)
+    selectedLookDirection = selected
 end)
 
 trickTab:AddKeybind("Wallhop Jump Key", "J", performWallhop)
