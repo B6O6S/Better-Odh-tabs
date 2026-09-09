@@ -24,18 +24,31 @@ getgenv().GunSound_SavedId = getgenv().GunSound_SavedId or "rbxassetid://1020980
 getgenv().GunSound_SavedName = getgenv().GunSound_SavedName or "Default"
 getgenv().GunSound_CustomId = getgenv().GunSound_CustomId or nil
 getgenv().GunSound_Enabled = getgenv().GunSound_Enabled or false
+getgenv().GunSound_Volume = getgenv().GunSound_Volume or 1
 
 local selectedSoundId = getgenv().GunSound_SavedId
 local customEnabled = getgenv().GunSound_Enabled
 local customTextboxId = getgenv().GunSound_CustomId
 local lastSelected = getgenv().GunSound_SavedName
+local soundVolume = getgenv().GunSound_Volume
 local connections = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- Function to layer custom sound
+-- Function to play sound (used for testing)
+local function playSound(soundId, volume)
+    if not soundId or soundId == "" then return end
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = soundId
+    soundObj.Volume = volume or 1
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Destroy()
+end
+
+-- Function to layer custom sound with volume
 local function layerSound(origSound)
     if not selectedSoundId then return end
     origSound.Volume = 0
@@ -47,7 +60,7 @@ local function layerSound(origSound)
     connections[origSound] = origSound.Played:Connect(function()
         local custom = Instance.new("Sound")
         custom.SoundId = selectedSoundId
-        custom.Volume = 1
+        custom.Volume = soundVolume
         custom.PlayOnRemove = true
         custom.Parent = origSound.Parent
         custom:Destroy()
@@ -138,3 +151,16 @@ if dropdown and dropdown.Select then
         dropdown.Select(getgenv().GunSound_SavedName)
     end)
 end
+
+-- Volume Slider
+pcall(function()
+    gunSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
+        soundVolume = value / 10
+        getgenv().GunSound_Volume = soundVolume
+    end)
+end)
+
+-- Test Sound Effect Button
+gunSoundSection:AddButton("Test Sound Effect", function()
+    playSound(selectedSoundId, soundVolume)
+end)
