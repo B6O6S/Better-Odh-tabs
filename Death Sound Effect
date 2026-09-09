@@ -3,7 +3,7 @@ local shared = odh_shared_plugins
 -- Create a new section
 local jukeSoundSection = shared.AddSection("Death Sound Effect")
 
--- Sound options (default first)
+-- Sound options ordered normally, with Custom at the very end
 local sounds = {
     "Arab dad fart|126753086907254",
     "iraqi kid \"wow\" *fart*|107988548317949",
@@ -12,19 +12,39 @@ local sounds = {
     "OOUUGGHH|97843302606905",
     "Meow|7148585764",
     "Bruh|6349641063",
+    "Screams|94314745898930",
     "Custom|0" -- Placeholder for textbox input
 }
 
-local selectedSoundId = "rbxassetid://126753086907254"
-local customEnabled = false
-local customTextboxId = nil
-local lastSelected = "OOUUGGHH"
+-- Use getgenv() to save choices across script re-executions
+getgenv().DeathSound_SavedId = getgenv().DeathSound_SavedId or "rbxassetid://126753086907254"
+getgenv().DeathSound_SavedName = getgenv().DeathSound_SavedName or "Arab dad fart"
+getgenv().DeathSound_CustomId = getgenv().DeathSound_CustomId or nil
+getgenv().DeathSound_Enabled = getgenv().DeathSound_Enabled or false
+getgenv().DeathSound_Volume = getgenv().DeathSound_Volume or 1
+
+local selectedSoundId = getgenv().DeathSound_SavedId
+local customEnabled = getgenv().DeathSound_Enabled
+local customTextboxId = getgenv().DeathSound_CustomId
+local lastSelected = getgenv().DeathSound_SavedName
+local soundVolume = getgenv().DeathSound_Volume
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local hasPlayedDeathSound = false
 local lastCharacter = nil
+
+-- Function to play sound (used for both death and testing)
+local function playSound(soundId, volume)
+    if not soundId or soundId == "" then return end
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = soundId
+    soundObj.Volume = volume or 1
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Destroy()
+end
 
 -- Function to play custom sound and mute/remove Roblox default death sound
 local function playDeathSound(char)
@@ -51,13 +71,8 @@ local function playDeathSound(char)
         end
     end
 
-    -- Play custom sound
-    local soundObj = Instance.new("Sound")
-    soundObj.SoundId = selectedSoundId
-    soundObj.Volume = 1
-    soundObj.PlayOnRemove = true
-    soundObj.Parent = workspace
-    soundObj:Destroy()
+    -- Play custom sound with selected volume
+    playSound(selectedSoundId, soundVolume)
 end
 
 -- Function to setup death detection on the current character
@@ -123,6 +138,7 @@ LocalPlayer.CharacterAdded:Connect(setupCharacter)
 -- Toggle for enabling/disabling death sound
 jukeSoundSection:AddToggle("Enable Death Sound", function(bool)
     customEnabled = bool
+    getgenv().DeathSound_Enabled = bool
     hasPlayedDeathSound = false
 end)
 
@@ -134,8 +150,11 @@ jukeSoundSection:AddTextBox("Custom SoundId", function(text)
         else
             customTextboxId = text
         end
+        getgenv().DeathSound_CustomId = customTextboxId
+        
         if lastSelected == "Custom" then
             selectedSoundId = customTextboxId
+            getgenv().DeathSound_SavedId = selectedSoundId
         end
     end
 end)
@@ -147,8 +166,10 @@ for _, data in ipairs(sounds) do
     table.insert(dropdownOptions, name)
 end
 
-jukeSoundSection:AddDropdown("Select Death Sound", dropdownOptions, function(selected)
+local dropdown = jukeSoundSection:AddDropdown("Select Death Sound", dropdownOptions, function(selected)
     lastSelected = selected
+    getgenv().DeathSound_SavedName = selected
+
     if selected == "Custom" then
         selectedSoundId = customTextboxId
     else
@@ -160,4 +181,24 @@ jukeSoundSection:AddDropdown("Select Death Sound", dropdownOptions, function(sel
             end
         end
     end
+    getgenv().DeathSound_SavedId = selectedSoundId
+end)
+
+pcall(function() 
+    if dropdown and dropdown.Select then
+        dropdown.Select(getgenv().DeathSound_SavedName) 
+    end
+end)
+
+-- Volume Slider
+pcall(function()
+    jukeSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
+        soundVolume = value / 10
+        getgenv().DeathSound_Volume = soundVolume
+    end)
+end)
+
+-- Test Sound Button using AddButton format
+jukeSoundSection:AddButton("Test Sound Effect", function()
+    playSound(selectedSoundId, soundVolume)
 end)
