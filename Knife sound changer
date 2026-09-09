@@ -32,12 +32,25 @@ do
     getgenv().KnifeSound_SavedName = getgenv().KnifeSound_SavedName or "Default"
     getgenv().KnifeSound_CustomId = getgenv().KnifeSound_CustomId or nil
     getgenv().KnifeSound_Enabled = getgenv().KnifeSound_Enabled or false
+    getgenv().KnifeSound_Volume = getgenv().KnifeSound_Volume or 1
 
     local selectedSoundId = getgenv().KnifeSound_SavedId
     local customEnabled = getgenv().KnifeSound_Enabled  
     local customTextboxId = getgenv().KnifeSound_CustomId  
     local lastSelected = getgenv().KnifeSound_SavedName  
+    local soundVolume = getgenv().KnifeSound_Volume
     local connections = {}  
+
+    -- Function to play sound (used for testing)
+    local function playSound(soundId, volume)
+        if not soundId or soundId == "" then return end
+        local soundObj = Instance.new("Sound")
+        soundObj.SoundId = soundId
+        soundObj.Volume = volume or 1
+        soundObj.PlayOnRemove = true
+        soundObj.Parent = workspace
+        soundObj:Destroy()
+    end
 
     local function layerSound(origSound)  
         if not selectedSoundId then return end  
@@ -50,7 +63,7 @@ do
         connections[origSound] = origSound.Played:Connect(function()  
             local custom = Instance.new("Sound")  
             custom.SoundId = selectedSoundId  
-            custom.Volume = 1  
+            custom.Volume = soundVolume  
             custom.PlayOnRemove = true  
             custom.Parent = origSound.Parent  
             custom:Destroy()  
@@ -132,5 +145,18 @@ do
         if dropdown and dropdown.Select then
             dropdown.Select(getgenv().KnifeSound_SavedName) 
         end
+    end)
+
+    -- Volume Slider
+    pcall(function()
+        knifeSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
+            soundVolume = value / 10
+            getgenv().KnifeSound_Volume = soundVolume
+        end)
+    end)
+
+    -- Test Sound Effect Button
+    knifeSoundSection:AddButton("Test Sound Effect", function()
+        playSound(selectedSoundId, soundVolume)
     end)
 end
