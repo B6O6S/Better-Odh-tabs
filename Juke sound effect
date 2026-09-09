@@ -3,11 +3,13 @@ local shared = odh_shared_plugins
 -- Create a new section
 local jukeSoundSection = shared.AddSection("Juke Sound effect")
 
--- Sound options (default first)
+-- Sound options ordered normally, with new options included and Custom at the very end
 local sounds = {
     "Ankle break|116630605163027",
     "Where are you going|140099088033128",
     "Please Speed i need this|96825144718073",
+    "Haki|131717855995267",
+    "Michael Myers|103625247693766",
     "بالراحة (B6O6S)|90233621241303",
     "بسم الله عليك (B6O6S)|109098054743197",
     "عجيب والله (B6O6S)|131846507499000",
@@ -18,10 +20,20 @@ local sounds = {
     "Custom|0" -- Placeholder for textbox input
 }
 
-local selectedSoundId = "rbxassetid://116630605163027" -- default selected
-local customEnabled = false
-local customTextboxId = nil -- Store user input for custom ID
-local lastSelected = "Ankle break" -- Track dropdown selection
+-- Use getgenv() to save choices across script re-executions
+getgenv().JukeSound_SavedId = getgenv().JukeSound_SavedId or "rbxassetid://116630605163027"
+getgenv().JukeSound_SavedName = getgenv().JukeSound_SavedName or "Ankle break"
+getgenv().JukeSound_CustomId = getgenv().JukeSound_CustomId or nil
+getgenv().JukeSound_Enabled = getgenv().JukeSound_Enabled or false
+getgenv().JukeSound_Distance = getgenv().JukeSound_Distance or 15
+getgenv().JukeSound_Volume = getgenv().JukeSound_Volume or 1
+
+local selectedSoundId = getgenv().JukeSound_SavedId
+local customEnabled = getgenv().JukeSound_Enabled
+local customTextboxId = getgenv().JukeSound_CustomId
+local lastSelected = getgenv().JukeSound_SavedName
+local JUKE_DISTANCE = getgenv().JukeSound_Distance
+local soundVolume = getgenv().JukeSound_Volume
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -31,18 +43,22 @@ local LocalPlayer = Players.LocalPlayer
 local roles
 local Murder
 local hasPlayedJuke = false
-local JUKE_DISTANCE = 15 -- Distance in studs to trigger the sound
+
+-- Function to play sound (used for both juke trigger and testing)
+local function playSound(soundId, volume)
+    if not soundId or soundId == "" then return end
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = soundId
+    soundObj.Volume = volume or 1
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Destroy()
+end
 
 -- Function to play the custom juke sound
 local function playJukeSound()
     if not selectedSoundId or not customEnabled then return end
-    
-    local soundObj = Instance.new("Sound")
-    soundObj.SoundId = selectedSoundId
-    soundObj.Volume = 1
-    soundObj.PlayOnRemove = true
-    soundObj.Parent = workspace
-    soundObj:Destroy()
+    playSound(selectedSoundId, soundVolume)
 end
 
 -- Function to check distance to the murderer
@@ -104,12 +120,14 @@ end)
 -- Toggle for enabling/disabling custom juke sound
 jukeSoundSection:AddToggle("Enable Juke Sound", function(bool)
     customEnabled = bool
+    getgenv().JukeSound_Enabled = bool
     hasPlayedJuke = false
 end)
 
 -- Slider to control juke trigger distance (min: 5, max: 50, default: 15)
-jukeSoundSection:AddSlider("Juke Distance", 5, 50, 15, function(value)
+jukeSoundSection:AddSlider("Juke Distance", 5, 50, JUKE_DISTANCE, function(value)
     JUKE_DISTANCE = value
+    getgenv().JukeSound_Distance = value
 end)
 
 -- TextBox for custom SoundId
@@ -120,8 +138,11 @@ jukeSoundSection:AddTextBox("Custom SoundId", function(text)
         else
             customTextboxId = text
         end
+        getgenv().JukeSound_CustomId = customTextboxId
+        
         if lastSelected == "Custom" then
             selectedSoundId = customTextboxId
+            getgenv().JukeSound_SavedId = selectedSoundId
         end
     end
 end)
@@ -133,8 +154,10 @@ for _, data in ipairs(sounds) do
     table.insert(dropdownOptions, name)
 end
 
-jukeSoundSection:AddDropdown("Select Juke Sound", dropdownOptions, function(selected)
+local dropdown = jukeSoundSection:AddDropdown("Select Juke Sound", dropdownOptions, function(selected)
     lastSelected = selected
+    getgenv().JukeSound_SavedName = selected
+
     if selected == "Custom" then
         selectedSoundId = customTextboxId
     else
@@ -146,4 +169,24 @@ jukeSoundSection:AddDropdown("Select Juke Sound", dropdownOptions, function(sele
             end
         end
     end
+    getgenv().JukeSound_SavedId = selectedSoundId
+end)
+
+pcall(function() 
+    if dropdown and dropdown.Select then
+        dropdown.Select(getgenv().JukeSound_SavedName) 
+    end
+end)
+
+-- Volume Slider
+pcall(function()
+    jukeSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
+        soundVolume = value / 10
+        getgenv().JukeSound_Volume = soundVolume
+    end)
+end)
+
+-- Test Sound Effect Button
+jukeSoundSection:AddButton("Test Sound Effect", function()
+    playSound(selectedSoundId, soundVolume)
 end)
