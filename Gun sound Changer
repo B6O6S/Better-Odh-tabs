@@ -25,13 +25,16 @@ getgenv().GunSound_SavedName = getgenv().GunSound_SavedName or "Default"
 getgenv().GunSound_CustomId = getgenv().GunSound_CustomId or nil
 getgenv().GunSound_Enabled = getgenv().GunSound_Enabled or false
 getgenv().GunSound_Volume = getgenv().GunSound_Volume or 1
+getgenv().GunSound_MuteReload = getgenv().GunSound_MuteReload or false
 
 local selectedSoundId = getgenv().GunSound_SavedId
 local customEnabled = getgenv().GunSound_Enabled
 local customTextboxId = getgenv().GunSound_CustomId
 local lastSelected = getgenv().GunSound_SavedName
 local soundVolume = getgenv().GunSound_Volume
+local muteReloadEnabled = getgenv().GunSound_MuteReload
 local connections = {}
+local reloadConnections = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -46,6 +49,24 @@ local function playSound(soundId, volume)
     soundObj.PlayOnRemove = true
     soundObj.Parent = workspace
     soundObj:Destroy()
+end
+
+-- Function to mute reload sound if enabled
+local function checkReloadSound(sound)
+    local soundId = sound.SoundId
+    if soundId and (string.find(soundId, "4753414199") or soundId == "rbxassetid://4753414199") then
+        if muteReloadEnabled then
+            sound.Volume = 0
+            if reloadConnections[sound] then
+                reloadConnections[sound]:Disconnect()
+            end
+            reloadConnections[sound] = sound:GetPropertyChangedSignal("Volume"):Connect(function()
+                if muteReloadEnabled then
+                    sound.Volume = 0
+                end
+            end)
+        end
+    end
 end
 
 -- Function to layer custom sound with volume
@@ -67,24 +88,26 @@ local function layerSound(origSound)
     end)
 end
 
--- Function to apply custom sound to all gunshots
+-- Function to apply custom sounds and reload mutes
 local function applySounds()
-    if not customEnabled then return end
     local containers = {LocalPlayer.Backpack, LocalPlayer.Character}
     for _, container in ipairs(containers) do
         if container then
             for _, obj in ipairs(container:GetDescendants()) do
-                if obj:IsA("Sound") and obj.Name == "Gunshot" then
-                    layerSound(obj)
+                if obj:IsA("Sound") then
+                    if obj.Name == "Gunshot" and customEnabled then
+                        layerSound(obj)
+                    end
+                    checkReloadSound(obj)
                 end
             end
         end
     end
 end
 
--- Heartbeat loop to handle new guns
+-- Heartbeat loop to handle new guns and sounds
 RunService.Heartbeat:Connect(function()
-    if customEnabled then
+    if customEnabled or muteReloadEnabled then
         applySounds()
     end
 end)
@@ -93,6 +116,15 @@ end)
 gunSoundSection:AddToggle("Enable Custom Sound", function(bool)
     customEnabled = bool
     getgenv().GunSound_Enabled = bool -- Save toggle state
+    if bool then
+        applySounds()
+    end
+end)
+
+-- Toggle for muting reload sound
+gunSoundSection:AddToggle("Mute Reload Sound", function(bool)
+    muteReloadEnabled = bool
+    getgenv().GunSound_MuteReload = bool
     if bool then
         applySounds()
     end
