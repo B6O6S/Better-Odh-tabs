@@ -6,6 +6,8 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 -- =============================
@@ -133,7 +135,7 @@ local function setup360Button()
 end
 
 -- =============================
--- PLUGIN TOGGLES & SLIDERS
+-- PLUGIN TOGGLES & SLIDERS (UPPER SECTION)
 -- =============================
 trickTab:AddToggle("Enable Automatic 360 Trickshot", function(on)
     trickshotEnabled = on
@@ -291,4 +293,347 @@ UserInputService.JumpRequest:Connect(function()
     if wallhopEnabled and InfiniteJumpEnabled then
         performWallhop()
     end
+end)
+
+-- =============================
+-- BOMB JUMP FEATURE
+-- =============================
+local toyEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Extras"):WaitForChild("ReplicateToy")
+
+local screenGui = CoreGui:FindFirstChild("AutoSequenceJumpDraggableGui")
+local frame, button, stroke
+
+local bombJumpGuiSize = 220
+local showBombJumpGui = false
+local bombUseMode = "Toggle To Use Bomb" -- "Toggle To Use Bomb" or "Click To Use Bomb"
+
+if not screenGui then
+	screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "AutoSequenceJumpDraggableGui"
+	screenGui.ResetOnSpawn = false
+	screenGui.Enabled = false
+	screenGui.Parent = CoreGui
+
+	frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, bombJumpGuiSize, 0, bombJumpGuiSize * (100/220))
+	frame.Position = UDim2.new(1, -240, 1, -210)
+	frame.BackgroundTransparency = 1
+	frame.Parent = screenGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 22)
+	corner.Parent = frame
+
+	stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 255, 255)
+	stroke.Transparency = 0
+	stroke.Thickness = 3.5
+	stroke.Parent = frame
+
+	button = Instance.new("TextButton")
+	button.Size = UDim2.new(1, 0, 1, 0)
+	button.BackgroundTransparency = 1
+	button.Text = "Bomb Jump (OFF)"
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextSize = 18
+	button.Font = Enum.Font.GothamBold
+	button.Parent = frame
+else
+	frame = screenGui:FindFirstChildOfClass("Frame")
+	stroke = frame and frame:FindFirstChildOfClass("UIStroke")
+	button = frame and frame:FindFirstChildOfClass("TextButton")
+end
+
+local isActive = false
+local hasTriggered = false
+local isWaitingTimer = false
+local timerToken = 0
+
+local dragging = false
+local dragInput, dragStart, startPos
+
+button.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+button.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		frame.Position = UDim2.new(
+			startPos.X.Scale, 
+			startPos.X.Offset + delta.X, 
+			startPos.Y.Scale, 
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+local moved = false
+button.InputBegan:Connect(function() moved = false end)
+button.InputChanged:Connect(function() moved = true end)
+
+local function executeBombJumpAction(isToggleMode)
+	local character = LocalPlayer.Character
+	if not character then return end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not rootPart then return end
+
+	hasTriggered = true
+	isActive = false
+	
+	task.spawn(function()
+		-- Toggle mode uses 0.1 wait after jump before using bomb
+		if isToggleMode then
+			task.wait(0.1)
+		end
+
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		local tool = character:FindFirstChild("FakeBomb") or (backpack and backpack:FindFirstChild("FakeBomb"))
+		
+		if tool then
+			if tool.Parent == backpack then
+				humanoid:EquipTool(tool)
+			end
+			
+			toyEvent:InvokeServer("FakeBomb")
+			
+			local VirtualUser = game:GetService("VirtualUser")
+			VirtualUser:Button1Down(Vector2.new(0, 0))
+			VirtualUser:Button1Up(Vector2.new(0, 0))
+			
+			if tool.Parent == character then
+				tool.Parent = backpack
+			end
+		end
+		
+		-- Toggle mode uses 0.1 wait after bomb before applying velocity jump
+		if isToggleMode then
+			task.wait(0.1)
+		end
+
+		local defaultJumpPower = humanoid.UseJumpPower and humanoid.JumpPower or (humanoid.JumpHeight * 3.55)
+		local extraJumpPower = defaultJumpPower + 10
+		rootPart.AssemblyLinearVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, extraJumpPower, rootPart.AssemblyLinearVelocity.Z)
+		
+		isWaitingTimer = true
+		stroke.Color = Color3.fromRGB(255, 0, 0)
+		local currentToken = timerToken
+		local waitTime = 21.7
+		local startTime = tick()
+		
+		while true do
+			if timerToken ~= currentToken then return end
+			local elapsed = tick() - startTime
+			local remaining = waitTime - elapsed
+			
+			if remaining <= 0 then break end
+			
+			button.Text = string.format("Wait (%.1fs)", remaining)
+			button.TextColor3 = Color3.fromRGB(255, 0, 0)
+			task.wait(0.05)
+		end
+		
+		if timerToken ~= currentToken then return end
+		isWaitingTimer = false
+		hasTriggered = false
+		
+		if bombUseMode == "Toggle To Use Bomb" then
+			button.Text = "Bomb Jump (OFF)"
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			button.Text = "Bomb Jump"
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+	end)
+end
+
+button.MouseButton1Click:Connect(function()
+	if moved or isWaitingTimer then return end
+	
+	if bombUseMode == "Toggle To Use Bomb" then
+		isActive = not isActive
+		if isActive then
+			button.Text = "Ready"
+			button.TextColor3 = Color3.fromRGB(50, 255, 50)
+			stroke.Color = Color3.fromRGB(50, 200, 50)
+			hasTriggered = false
+			toyEvent:InvokeServer("FakeBomb")
+		else
+			button.Text = "Bomb Jump (OFF)"
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+			stroke.Color = Color3.fromRGB(255, 255, 255)
+			hasTriggered = false
+		end
+	elseif bombUseMode == "Click To Use Bomb" then
+		toyEvent:InvokeServer("FakeBomb")
+		executeBombJumpAction(false) -- Click mode remains instant (no 0.1 delay)
+	end
+end)
+
+local function setupCharacterBomb(character)
+	local humanoid = character:WaitForChild("Humanoid")
+	
+	timerToken = timerToken + 1
+	isWaitingTimer = false
+	hasTriggered = false
+	
+	if bombUseMode == "Toggle To Use Bomb" then
+		if not isActive then
+			button.Text = "Bomb Jump (OFF)"
+			button.TextColor3 = Color3.fromRGB(255, 255, 255)
+			stroke.Color = Color3.fromRGB(255, 255, 255)
+		end
+	else
+		button.Text = "Bomb Jump"
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+	end
+
+	humanoid.StateChanged:Connect(function(oldState, newState)
+		if bombUseMode ~= "Toggle To Use Bomb" or not isActive or hasTriggered or isWaitingTimer then return end
+		
+		if newState == Enum.HumanoidStateType.Jumping then
+			executeBombJumpAction(true) -- Toggle mode applies the 0.1 delays
+		elseif newState == Enum.HumanoidStateType.Landed then
+			if not isWaitingTimer then
+				hasTriggered = false
+			end
+		end
+	end)
+end
+
+if LocalPlayer.Character then
+	setupCharacterBomb(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(setupCharacterBomb)
+
+-- Bomb Jump GUI elements
+trickTab:AddToggle("Show Bomb Jump Button", function(on)
+	showBombJumpGui = on
+	if screenGui then
+		screenGui.Enabled = on
+	end
+end)
+
+trickTab:AddDropdown("Bomb Usage Mode", {"Toggle To Use Bomb", "Click To Use Bomb"}, function(selected)
+	bombUseMode = selected
+	isActive = false
+	hasTriggered = false
+	if isWaitingTimer then return end
+	
+	if frame and button and stroke then
+		if bombUseMode == "Toggle To Use Bomb" then
+			button.Text = "Bomb Jump (OFF)"
+		else
+			button.Text = "Bomb Jump"
+		end
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+	end
+end)
+
+trickTab:AddSlider("Bomb Jump GUI Size", 100, 300, bombJumpGuiSize, function(v)
+	bombJumpGuiSize = v
+	if frame then
+		frame.Size = UDim2.new(0, bombJumpGuiSize, 0, bombJumpGuiSize * (100/220))
+	end
+end)
+
+-- =============================
+-- TOY AUTO-SPAWN (BOTTOM OF TAB)
+-- =============================
+local autoSpawnToysEnabled = false
+local selectedToy1 = "None"
+local selectedToy2 = "None"
+local availableToysList = {"None"}
+local hasSpawnedThisLife = false
+
+local function updateAvailableToys()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local toysFolder = backpack and backpack:FindFirstChild("Toys")
+    local list = {"None"}
+    if toysFolder then
+        for _, toy in ipairs(toysFolder:GetChildren()) do
+            table.insert(list, toy.Name)
+        end
+    end
+    availableToysList = list
+end
+
+updateAvailableToys()
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        local toysFolder = backpack and backpack:FindFirstChild("Toys")
+        if toysFolder then
+            updateAvailableToys()
+        end
+    end
+end)
+
+local function spawnSelectedToys()
+    if not autoSpawnToysEnabled or hasSpawnedThisLife then return end
+    hasSpawnedThisLife = true
+    
+    task.wait(0.5)
+    
+    if selectedToy1 and selectedToy1 ~= "None" then
+        pcall(function()
+            toyEvent:InvokeServer(selectedToy1)
+        end)
+        task.wait(0.2)
+    end
+    
+    if selectedToy2 and selectedToy2 ~= "None" then
+        pcall(function()
+            toyEvent:InvokeServer(selectedToy2)
+        end)
+    end
+end
+
+local function onCharacterAddedToys(char)
+    hasSpawnedThisLife = false
+    if autoSpawnToysEnabled then
+        spawnSelectedToys()
+    end
+end
+
+if LocalPlayer.Character then
+    onCharacterAddedToys(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(onCharacterAddedToys)
+
+trickTab:AddToggle("Auto Spawn Toys On Respawn", function(on)
+    autoSpawnToysEnabled = on
+    if on and not hasSpawnedThisLife then
+        spawnSelectedToys()
+    end
+end)
+
+trickTab:AddDropdown("Select Toy Slot 1", availableToysList, function(selected)
+    selectedToy1 = selected
+end)
+
+trickTab:AddDropdown("Select Toy Slot 2", availableToysList, function(selected)
+    selectedToy2 = selected
 end)
