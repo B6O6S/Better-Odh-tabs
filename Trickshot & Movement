@@ -247,11 +247,9 @@ local function performWallhop()
     if raycastResult then
         InfiniteJumpEnabled = false
 
-        -- 1. Jump and smoothly angle using CFrame multiplication like your working script
         humanoid:ChangeState("Jumping")
         
         if backToNormalEnabled then
-            -- Initial rotation snap based on dropdown selection
             if selectedLookDirection == "Back" then
                 hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.pi, 0)
             elseif selectedLookDirection == "Right" then
@@ -261,8 +259,6 @@ local function performWallhop()
             end
 
             task.wait(0.15)
-            
-            -- Smoothly tween or snap back to normal original orientation smoothly
             hrp.CFrame = hrp.CFrame * CFrame.Angles(0, (selectedLookDirection == "Back" and math.pi or (selectedLookDirection == "Right" and math.pi/2 or -math.pi/2)), 0)
         else
             hrp.CFrame = hrp.CFrame * CFrame.Angles(0, -1, 0)
@@ -305,7 +301,7 @@ local frame, button, stroke
 
 local bombJumpGuiSize = 220
 local showBombJumpGui = false
-local bombUseMode = "Toggle To Use Bomb" -- "Toggle To Use Bomb" or "Click To Use Bomb"
+local bombUseMode = "Toggle To Use Bomb"
 
 if not screenGui then
 	screenGui = Instance.new("ScreenGui")
@@ -399,7 +395,6 @@ local function executeBombJumpAction(isToggleMode)
 	isActive = false
 	
 	task.spawn(function()
-		-- Toggle mode uses 0.1 wait after jump before using bomb
 		if isToggleMode then
 			task.wait(0.1)
 		end
@@ -423,14 +418,12 @@ local function executeBombJumpAction(isToggleMode)
 			end
 		end
 		
-		-- Toggle mode uses 0.1 wait after bomb before applying velocity jump
 		if isToggleMode then
 			task.wait(0.1)
 		end
 
-		local defaultJumpPower = humanoid.UseJumpPower and humanoid.JumpPower or (humanoid.JumpHeight * 3.55)
-		local extraJumpPower = defaultJumpPower + 10
-		rootPart.AssemblyLinearVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, extraJumpPower, rootPart.AssemblyLinearVelocity.Z)
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		humanoid.Jump = true
 		
 		isWaitingTimer = true
 		stroke.Color = Color3.fromRGB(255, 0, 0)
@@ -484,7 +477,7 @@ button.MouseButton1Click:Connect(function()
 		end
 	elseif bombUseMode == "Click To Use Bomb" then
 		toyEvent:InvokeServer("FakeBomb")
-		executeBombJumpAction(false) -- Click mode remains instant (no 0.1 delay)
+		executeBombJumpAction(false)
 	end
 end)
 
@@ -511,7 +504,7 @@ local function setupCharacterBomb(character)
 		if bombUseMode ~= "Toggle To Use Bomb" or not isActive or hasTriggered or isWaitingTimer then return end
 		
 		if newState == Enum.HumanoidStateType.Jumping then
-			executeBombJumpAction(true) -- Toggle mode applies the 0.1 delays
+			executeBombJumpAction(true)
 		elseif newState == Enum.HumanoidStateType.Landed then
 			if not isWaitingTimer then
 				hasTriggered = false
@@ -525,7 +518,6 @@ if LocalPlayer.Character then
 end
 LocalPlayer.CharacterAdded:Connect(setupCharacterBomb)
 
--- Bomb Jump GUI elements
 trickTab:AddToggle("Show Bomb Jump Button", function(on)
 	showBombJumpGui = on
 	if screenGui then
@@ -558,17 +550,23 @@ trickTab:AddSlider("Bomb Jump GUI Size", 100, 300, bombJumpGuiSize, function(v)
 end)
 
 -- =============================
--- TOY AUTO-SPAWN (BOTTOM OF TAB)
+-- TOY AUTO-SPAWN (FIXED RESPAWN LOGIC)
 -- =============================
 local autoSpawnToysEnabled = false
 local selectedToy1 = "None"
 local selectedToy2 = "None"
 local availableToysList = {"None"}
-local hasSpawnedThisLife = false
+
+local function getToysFolder()
+    local backpack = LocalPlayer:WaitForChild("Backpack", 5)
+    if backpack then
+        return backpack:WaitForChild("Toys", 5)
+    end
+    return nil
+end
 
 local function updateAvailableToys()
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    local toysFolder = backpack and backpack:FindFirstChild("Toys")
+    local toysFolder = getToysFolder()
     local list = {"None"}
     if toysFolder then
         for _, toy in ipairs(toysFolder:GetChildren()) do
@@ -580,52 +578,40 @@ end
 
 updateAvailableToys()
 
-task.spawn(function()
-    while true do
-        task.wait(2)
-        local backpack = LocalPlayer:FindFirstChild("Backpack")
-        local toysFolder = backpack and backpack:FindFirstChild("Toys")
-        if toysFolder then
-            updateAvailableToys()
-        end
-    end
-end)
-
 local function spawnSelectedToys()
-    if not autoSpawnToysEnabled or hasSpawnedThisLife then return end
-    hasSpawnedThisLife = true
+    if not autoSpawnToysEnabled then return end
     
-    task.wait(0.5)
-    
-    if selectedToy1 and selectedToy1 ~= "None" then
-        pcall(function()
-            toyEvent:InvokeServer(selectedToy1)
-        end)
-        task.wait(0.2)
-    end
-    
-    if selectedToy2 and selectedToy2 ~= "None" then
-        pcall(function()
-            toyEvent:InvokeServer(selectedToy2)
-        end)
-    end
+    task.spawn(function()
+        -- Wait for character and humanoid to fully load before attempting toy placement
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        char:WaitForChild("Humanoid", 5)
+        
+        -- Wait until the Toys folder is loaded into Backpack
+        getToysFolder()
+        task.wait(0.5)
+
+        if selectedToy1 and selectedToy1 ~= "None" then
+            pcall(function()
+                toyEvent:InvokeServer(selectedToy1)
+            end)
+            task.wait(0.3)
+        end
+        
+        if selectedToy2 and selectedToy2 ~= "None" then
+            pcall(function()
+                toyEvent:InvokeServer(selectedToy2)
+            end)
+        end
+    end)
 end
 
-local function onCharacterAddedToys(char)
-    hasSpawnedThisLife = false
-    if autoSpawnToysEnabled then
-        spawnSelectedToys()
-    end
-end
-
-if LocalPlayer.Character then
-    onCharacterAddedToys(LocalPlayer.Character)
-end
-LocalPlayer.CharacterAdded:Connect(onCharacterAddedToys)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    spawnSelectedToys()
+end)
 
 trickTab:AddToggle("Auto Spawn Toys On Respawn", function(on)
     autoSpawnToysEnabled = on
-    if on and not hasSpawnedThisLife then
+    if on then
         spawnSelectedToys()
     end
 end)
