@@ -36,6 +36,7 @@ getgenv().JukeSound_CustomId = getgenv().JukeSound_CustomId or nil
 getgenv().JukeSound_Enabled = getgenv().JukeSound_Enabled or false
 getgenv().JukeSound_Distance = getgenv().JukeSound_Distance or 15
 getgenv().JukeSound_Volume = getgenv().JukeSound_Volume or 1
+getgenv().JukeSound_PlayAllFE = getgenv().JukeSound_PlayAllFE or false
 
 local selectedSoundId = getgenv().JukeSound_SavedId
 local customEnabled = getgenv().JukeSound_Enabled
@@ -43,12 +44,13 @@ local customTextboxId = getgenv().JukeSound_CustomId
 local lastSelected = getgenv().JukeSound_SavedName
 local JUKE_DISTANCE = getgenv().JukeSound_Distance
 local soundVolume = getgenv().JukeSound_Volume
+local playAllFEEnabled = getgenv().JukeSound_PlayAllFE
 
 local roles
 local Murder
 local hasPlayedJuke = false
 
--- Function to play sound (used for both juke trigger and testing)
+-- Function to play sound (used for testing)
 local function playSound(soundId, volume)
     if not soundId or soundId == "" then return end
     local soundObj = Instance.new("Sound")
@@ -59,10 +61,56 @@ local function playSound(soundId, volume)
     soundObj:Destroy()
 end
 
--- Function to play the custom juke sound
+-- Function to play the custom juke sound and handle FE radio broadcast & volume sync
 local function playJukeSound()
     if not selectedSoundId or not customEnabled then return end
-    playSound(selectedSoundId, soundVolume)
+
+    local pureId = string.match(selectedSoundId, "(%d+)") or "116630605163027"
+    local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
+
+    local playSongRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+        and ReplicatedStorage.Remotes:FindFirstChild("Inventory") 
+        and ReplicatedStorage.Remotes.Inventory:FindFirstChild("PlaySong")
+
+    local effectiveVolume = soundVolume
+    if playAllFEEnabled and playSongRemote then
+        pcall(function()
+            playSongRemote:FireServer(assetUrl)
+        end)
+        effectiveVolume = 0
+    end
+
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = selectedSoundId
+    soundObj.Volume = effectiveVolume
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Play()
+
+    soundObj.Ended:Connect(function()
+        if playAllFEEnabled and playSongRemote then
+            pcall(function()
+                playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        local startTime = tick()
+        while soundObj.TimeLength == 0 and tick() - startTime < 2 do
+            task.wait(0.05)
+        end
+        local length = soundObj.TimeLength
+        if not length or length == 0 then
+            length = 0.5
+        end
+        task.wait(length)
+        if playAllFEEnabled and playSongRemote then
+            pcall(function()
+                playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+            end)
+        end
+    end)
 end
 
 -- Function to check distance to the murderer
@@ -126,10 +174,16 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- Toggle for enabling/disabling custom juke sound
-jukeSoundSection:AddToggle("Enable Juke Sound", function(bool)
+jukeSoundSection:AddToggle("Juke Sound [ Client Sided ]", function(bool)
     customEnabled = bool
     getgenv().JukeSound_Enabled = bool
     hasPlayedJuke = false
+end)
+
+-- Toggle for Play For all [ FE ]
+jukeSoundSection:AddToggle("Play For all [ FE ]", function(bool)
+    playAllFEEnabled = bool
+    getgenv().JukeSound_PlayAllFE = bool
 end)
 
 -- Slider to control juke trigger distance (min: 5, max: 50, default: 15)
