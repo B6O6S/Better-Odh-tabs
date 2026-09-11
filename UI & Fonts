@@ -45,7 +45,7 @@ ui_tab:AddToggle("Disable Trade Requests", function(on)
 end)
 
 -- =============================
--- VISUAL STAT SPOOFER CONTROLS
+-- VISUAL STAT SPOOFER CONTROLS (OPTIMIZED)
 -- =============================
 local spooferActive = false
 local statVal1 = "0"
@@ -68,34 +68,67 @@ ui_tab:AddTextBox("Stat 3 (Innocent / Survivals)", function(text)
     statVal3 = tostring(text or "0")
 end)
 
--- Background updating loop using broader descendants search to target stats securely
+-- Optimized updating loop using a targeted cache to eliminate heavy :GetDescendants() FPS drops
 task.spawn(function()
+    local cachedStatsElements = {}
+    local lastCacheCheck = 0
+
     while true do
-        task.wait(0.1)
+        task.wait(0.5) -- Increased interval from 0.1s to 0.5s to drastically lower overhead
         if spooferActive then
             pcall(function()
-                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                local mainGui = playerGui and playerGui:FindFirstChild("MainGUI")
-                if mainGui then
-                    for _, desc in ipairs(mainGui:GetDescendants()) do
-                        if desc.Name == "Season1Stats" or desc.Name == "Stats" or desc.Name == "Container" then
-                            local elim = desc:FindFirstChild("Eliminations")
-                            local saves = desc:FindFirstChild("Saves")
-                            local survivals = desc:FindFirstChild("Survivals")
-                            
-                            if elim and elim:FindFirstChild("Amount") then
-                                elim.Amount.Text = tostring(statVal1)
-                            end
-                            if saves and saves:FindFirstChild("Amount") then
-                                saves.Amount.Text = tostring(statVal2)
-                            end
-                            if survivals and survivals:FindFirstChild("Amount") then
-                                survivals.Amount.Text = tostring(statVal3)
+                local currentTime = tick()
+                -- Refresh cache every 3 seconds or if cache is empty
+                if currentTime - lastCacheCheck > 3 or #cachedStatsElements == 0 then
+                    lastCacheCheck = currentTime
+                    table.clear(cachedStatsElements)
+
+                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                    local mainGui = playerGui and playerGui:FindFirstChild("MainGUI")
+                    if mainGui then
+                        for _, desc in ipairs(mainGui:GetDescendants()) do
+                            if desc.Name == "Season1Stats" or desc.Name == "Stats" or desc.Name == "Container" then
+                                local elim = desc:FindFirstChild("Eliminations")
+                                local saves = desc:FindFirstChild("Saves")
+                                local survivals = desc:FindFirstChild("Survivals")
+                                
+                                local entry = {}
+                                if elim and elim:FindFirstChild("Amount") then
+                                    entry.ElimAmount = elim.Amount
+                                end
+                                if saves and saves:FindFirstChild("Amount") then
+                                    entry.SavesAmount = saves.Amount
+                                end
+                                if survivals and survivals:FindFirstChild("Amount") then
+                                    entry.SurvivalsAmount = survivals.Amount
+                                end
+                                
+                                if entry.ElimAmount or entry.SavesAmount or entry.SurvivalsAmount then
+                                    table.insert(cachedStatsElements, entry)
+                                end
                             end
                         end
                     end
                 end
+
+                -- Directly update cached references without expensive tree searching
+                for _, entry in ipairs(cachedStatsElements) do
+                    if entry.ElimAmount and entry.ElimAmount.Parent then
+                        entry.ElimAmount.Text = tostring(statVal1)
+                    end
+                    if entry.SavesAmount and entry.SavesAmount.Parent then
+                        entry.SavesAmount.Text = tostring(statVal2)
+                    end
+                    if entry.SurvivalsAmount and entry.SurvivalsAmount.Parent then
+                        entry.SurvivalsAmount.Text = tostring(statVal3)
+                    end
+                end
             end)
+        else
+            -- Clear cache when spoofer is turned off
+            if #cachedStatsElements > 0 then
+                table.clear(cachedStatsElements)
+            end
         end
     end
 end)
