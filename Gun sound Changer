@@ -1,5 +1,5 @@
 -- =============================
--- GUN SOUND CHANGER TAB
+-- GUN SOUND CHANGER TAB (OPTIMIZED)
 -- =============================
 local shared = odh_shared_plugins
 
@@ -38,11 +38,12 @@ local lastSelected = getgenv().GunSound_SavedName
 local soundVolume = getgenv().GunSound_Volume
 local muteReloadEnabled = getgenv().GunSound_MuteReload
 local playAllFEEnabled = getgenv().GunSound_PlayAllFE
+
 local connections = {}
 local reloadConnections = {}
+local processedSounds = {} -- Cache to prevent re-processing the same Sound instances every frame
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
@@ -59,25 +60,24 @@ end
 
 -- Function to mute reload sound if enabled
 local function checkReloadSound(sound)
+    if not muteReloadEnabled then return end
     local soundId = sound.SoundId
     if soundId and (string.find(soundId, "4753414199") or soundId == "rbxassetid://4753414199") then
-        if muteReloadEnabled then
-            sound.Volume = 0
-            if reloadConnections[sound] then
-                reloadConnections[sound]:Disconnect()
-            end
-            reloadConnections[sound] = sound:GetPropertyChangedSignal("Volume"):Connect(function()
-                if muteReloadEnabled then
-                    sound.Volume = 0
-                end
-            end)
+        sound.Volume = 0
+        if reloadConnections[sound] then
+            reloadConnections[sound]:Disconnect()
         end
+        reloadConnections[sound] = sound:GetPropertyChangedSignal("Volume"):Connect(function()
+            if muteReloadEnabled then
+                sound.Volume = 0
+            end
+        end)
     end
 end
 
--- Function to layer custom sound: plays client sound at volume 0 when FE is active so tracking & Ended events still work perfectly
+-- Function to layer custom sound
 local function layerSound(origSound)
-    if not selectedSoundId then return end
+    if not customEnabled or not selectedSoundId then return end
     origSound.Volume = 0
 
     if connections[origSound] then
@@ -92,7 +92,6 @@ local function layerSound(origSound)
             and ReplicatedStorage.Remotes:FindFirstChild("Inventory") 
             and ReplicatedStorage.Remotes.Inventory:FindFirstChild("PlaySong")
 
-        -- Determine client sound volume: 0 if FE radio is on (to avoid duplication while keeping events active), normal volume otherwise
         local effectiveVolume = soundVolume
         if playAllFEEnabled and playSongRemote then
             pcall(function()
@@ -135,8 +134,63 @@ local function layerSound(origSound)
     end)
 end
 
--- Function to apply custom sounds and reload mutes
-local function applySounds()
+-- Setup listener for new sound instances instead of running :GetDescendants() every frame on Heartbeat
+local function setupSoundInstance(obj)
+    if obj:IsA("Sound") and not processedSounds[obj] then
+        processedSounds[obj] = true
+        
+        if obj.Name == "Gunshot" then
+            layerSound(obj)
+        end
+        checkReloadSound(obj)
+
+        -- Clean up cache when sound is destroyed
+        obj.Destroying:Connect(function()
+            processedSounds[obj] = nil
+            if connections[obj] then
+                connections[obj]:Disconnect()
+                connections[obj] = nil
+            end
+            if reloadConnections[obj] then
+                reloadConnections[obj]:Disconnect()
+                reloadConnections[obj] = nil
+            end
+        end)
+    end
+end
+
+-- Connect to Backpack and Character descendant additions securely (zero FPS drop)
+local function hookContainer(container)
+    if not container then return end
+    for _, obj in ipairs(container:GetDescendants()) do
+        setupSoundInstance(obj)
+    end
+    container.DescendantAdded:Connect(setupSoundInstance)
+end
+
+if LocalPlayer.Backpack then
+    hookContainer(LocalPlayer.Backpack)
+end
+LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
+    task.spawn(function()
+        tool:WaitForChild("Handle", 2)
+        hookContainer(tool)
+    end)
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.spawn(function()
+        char:WaitForChild("HumanoidRootPart", 5)
+        hookContainer(char)
+    end)
+end)
+
+if LocalPlayer.Character then
+    hookContainer(LocalPlayer.Character)
+end
+
+-- Function to refresh existing loaded sounds when settings change
+local function refreshExistingSounds()
     local containers = {LocalPlayer.Backpack, LocalPlayer.Character}
     for _, container in ipairs(containers) do
         if container then
@@ -152,19 +206,12 @@ local function applySounds()
     end
 end
 
--- Heartbeat loop to handle new guns and sounds
-RunService.Heartbeat:Connect(function()
-    if customEnabled or muteReloadEnabled then
-        applySounds()
-    end
-end)
-
 -- Toggle for enabling/disabling custom sounds
 gunSoundSection:AddToggle("Enable Custom Sound [ Client Sided ]", function(bool)
     customEnabled = bool
     getgenv().GunSound_Enabled = bool
     if bool then
-        applySounds()
+        refreshExistingSounds()
     end
 end)
 
@@ -179,7 +226,7 @@ gunSoundSection:AddToggle("Mute Reload Sound", function(bool)
     muteReloadEnabled = bool
     getgenv().GunSound_MuteReload = bool
     if bool then
-        applySounds()
+        refreshExistingSounds()
     end
 end)
 
@@ -197,7 +244,7 @@ gunSoundSection:AddTextBox("Custom SoundId", function(text)
         if lastSelected == "Custom" then
             selectedSoundId = customTextboxId
             getgenv().GunSound_SavedId = selectedSoundId
-            applySounds()
+            refreshExistingSounds()
         end
     end
 end)
@@ -226,7 +273,7 @@ local dropdown = gunSoundSection:AddDropdown("Select Sound", dropdownOptions, fu
     end
     
     getgenv().GunSound_SavedId = selectedSoundId
-    applySounds() 
+    refreshExistingSounds() 
 end)
 
 if dropdown and dropdown.Select then
