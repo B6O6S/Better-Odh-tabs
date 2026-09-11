@@ -8,7 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local shared = odh_shared_plugins
 
 -- =============================
--- JUKE SOUND SECTION (OPTIMIZED)
+-- JUKE SOUND SECTION (OPTIMIZED & LAG-FREE)
 -- =============================
 local jukeSoundSection = shared.AddSection("Juke Sound effect")
 
@@ -48,6 +48,7 @@ local playAllFEEnabled = getgenv().JukeSound_PlayAllFE
 
 local Murder = nil
 local hasPlayedJuke = false
+local isLocalPlayerMurderer = false
 
 -- Function to play sound (used for testing)
 local function playSound(soundId, volume)
@@ -112,36 +113,19 @@ local function playJukeSound()
     end)
 end
 
--- Function to check distance to the murderer (throttled to run efficiently every 0.2 seconds instead of every frame)
+-- Function to check distance to the murderer (strict checks: only runs if local player is NOT the murderer)
 local lastCheck = 0
 local function checkJuke()
-    if not customEnabled or not Murder then return end
-    
-    if Murder == LocalPlayer.Name then return end
+    if not customEnabled or not Murder or isLocalPlayerMurderer then return end
 
     local murdererPlayer = Players:FindFirstChild(Murder)
-    
     if murdererPlayer and murdererPlayer.Character and murdererPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local mRoot = murdererPlayer.Character.HumanoidRootPart
         local lpRoot = LocalPlayer.Character.HumanoidRootPart
         
         local distance = (mRoot.Position - lpRoot.Position).Magnitude
         
-        local playerDataFunc = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-        local isAlive = true
-        if playerDataFunc then
-            local success, res = pcall(function()
-                return playerDataFunc:InvokeServer()
-            end)
-            if success and res and res[Murder] then
-                local data = res[Murder]
-                if data.Killed or data.Dead then
-                    isAlive = false
-                end
-            end
-        end
-        
-        if distance <= JUKE_DISTANCE and isAlive then
+        if distance <= JUKE_DISTANCE then
             if not hasPlayedJuke then
                 playJukeSound()
                 hasPlayedJuke = true
@@ -154,7 +138,7 @@ local function checkJuke()
     end
 end
 
--- Background loops: Fetch roles less frequently, and check distance via timer instead of hammering Heartbeat
+-- Background loop: Continuously track roles and cache whether the local player is the murderer
 task.spawn(function()
     local playerDataFunc = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
     while true do
@@ -163,22 +147,35 @@ task.spawn(function()
                 return playerDataFunc:InvokeServer()
             end)
             if success and res then
-                for i, v in pairs(res) do
-                    if v.Role == "Murderer" then
-                        Murder = i
+                local foundMurderer = nil
+                local userIsMurderer = false
+
+                for playerName, data in pairs(res) do
+                    if data.Role == "Murderer" then
+                        -- Ensure the murderer is actually alive
+                        if not data.Killed and not data.Dead then
+                            foundMurderer = playerName
+                            if playerName == LocalPlayer.Name then
+                                userIsMurderer = true
+                            end
+                        end
                         break
                     end
                 end
+
+                Murder = foundMurderer
+                isLocalPlayerMurderer = userIsMurderer
             end
         end
-        task.wait(1) -- Fetch role once per second instead of every frame
+        task.wait(1) -- Check role status every 1 second to eliminate network lag
     end
 end)
 
+-- Lightweight Heartbeat throttle (0.15s interval) to check proximity without frame drops
 RunService.Heartbeat:Connect(function(dt)
-    if not customEnabled then return end
+    if not customEnabled or isLocalPlayerMurderer then return end
     lastCheck = lastCheck + dt
-    if lastCheck >= 0.15 then -- Throttle distance calculations to prevent frame drops
+    if lastCheck >= 0.15 then
         lastCheck = 0
         checkJuke()
     end
