@@ -8,7 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local shared = odh_shared_plugins
 
 -- =============================
--- JUKE SOUND SECTION
+-- JUKE SOUND SECTION (OPTIMIZED)
 -- =============================
 local jukeSoundSection = shared.AddSection("Juke Sound effect")
 
@@ -46,8 +46,7 @@ local JUKE_DISTANCE = getgenv().JukeSound_Distance
 local soundVolume = getgenv().JukeSound_Volume
 local playAllFEEnabled = getgenv().JukeSound_PlayAllFE
 
-local roles
-local Murder
+local Murder = nil
 local hasPlayedJuke = false
 
 -- Function to play sound (used for testing)
@@ -113,11 +112,11 @@ local function playJukeSound()
     end)
 end
 
--- Function to check distance to the murderer
+-- Function to check distance to the murderer (throttled to run efficiently every 0.2 seconds instead of every frame)
+local lastCheck = 0
 local function checkJuke()
     if not customEnabled or not Murder then return end
     
-    -- Prevent juke sound from playing if the local player is the murderer
     if Murder == LocalPlayer.Name then return end
 
     local murdererPlayer = Players:FindFirstChild(Murder)
@@ -128,12 +127,17 @@ local function checkJuke()
         
         local distance = (mRoot.Position - lpRoot.Position).Magnitude
         
-        -- Simple IsAlive check
-        local isAlive = false
-        if roles and roles[Murder] then
-            local data = roles[Murder]
-            if not data.Killed and not data.Dead then
-                isAlive = true
+        local playerDataFunc = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+        local isAlive = true
+        if playerDataFunc then
+            local success, res = pcall(function()
+                return playerDataFunc:InvokeServer()
+            end)
+            if success and res and res[Murder] then
+                local data = res[Murder]
+                if data.Killed or data.Dead then
+                    isAlive = false
+                end
             end
         end
         
@@ -150,25 +154,32 @@ local function checkJuke()
     end
 end
 
--- Heartbeat loop to fetch roles and handle juke detection
-RunService.Heartbeat:Connect(function()
+-- Background loops: Fetch roles less frequently, and check distance via timer instead of hammering Heartbeat
+task.spawn(function()
     local playerDataFunc = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-    if playerDataFunc then
-        local success, res = pcall(function()
-            return playerDataFunc:InvokeServer()
-        end)
-        if success and res then
-            roles = res
-            for i, v in pairs(roles) do
-                if v.Role == "Murderer" then
-                    Murder = i
-                    break
+    while true do
+        if playerDataFunc then
+            local success, res = pcall(function()
+                return playerDataFunc:InvokeServer()
+            end)
+            if success and res then
+                for i, v in pairs(res) do
+                    if v.Role == "Murderer" then
+                        Murder = i
+                        break
+                    end
                 end
             end
         end
+        task.wait(1) -- Fetch role once per second instead of every frame
     end
-    
-    if customEnabled then
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+    if not customEnabled then return end
+    lastCheck = lastCheck + dt
+    if lastCheck >= 0.15 then -- Throttle distance calculations to prevent frame drops
+        lastCheck = 0
         checkJuke()
     end
 end)
