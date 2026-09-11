@@ -1,0 +1,202 @@
+-- =============================
+-- SERVICES & CORE VARIABLES
+-- =============================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local shared = odh_shared_plugins
+
+-- =============================
+-- JUMP SOUND SECTION
+-- =============================
+local jumpSoundSection = shared.AddSection("Jump Sound Changer")
+
+-- Sound options
+local sounds = {
+    "Default|9114408107",
+    "8 Bit|271111328",
+    "Mario|120089981011454",
+    "Trampoline|114384110581799",
+    "Old Roblox Jump|98548477938162",
+    "Meow|7148585764",
+    "Bruh|6349641063",
+    "Fart|8551016315",
+    "Custom|0"
+}
+
+-- Use getgenv() to save choices across script re-executions
+getgenv().JumpSound_SavedId = getgenv().JumpSound_SavedId or "rbxassetid://9114408107"
+getgenv().JumpSound_SavedName = getgenv().JumpSound_SavedName or "Default"
+getgenv().JumpSound_CustomId = getgenv().JumpSound_CustomId or nil
+getgenv().JumpSound_Enabled = getgenv().JumpSound_Enabled or false
+getgenv().JumpSound_Volume = getgenv().JumpSound_Volume or 1
+getgenv().JumpSound_PlayAllFE = getgenv().JumpSound_PlayAllFE or false
+
+local selectedSoundId = getgenv().JumpSound_SavedId
+local customEnabled = getgenv().JumpSound_Enabled
+local customTextboxId = getgenv().JumpSound_CustomId
+local lastSelected = getgenv().JumpSound_SavedName
+local soundVolume = getgenv().JumpSound_Volume
+local playAllFEEnabled = getgenv().JumpSound_PlayAllFE
+
+local connection = nil
+
+-- Function to play sound (used for testing)
+local function playSound(soundId, volume)
+    if not soundId or soundId == "" then return end
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = soundId
+    soundObj.Volume = volume or 1
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Destroy()
+end
+
+-- Function to handle jump sound execution and FE radio broadcast
+local function triggerJumpSound()
+    if not selectedSoundId or not customEnabled then return end
+
+    local pureId = string.match(selectedSoundId, "(%d+)") or "9114408107"
+    local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
+
+    local playSongRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+        and ReplicatedStorage.Remotes:FindFirstChild("Inventory") 
+        and ReplicatedStorage.Remotes.Inventory:FindFirstChild("PlaySong")
+
+    local effectiveVolume = soundVolume
+    if playAllFEEnabled and playSongRemote then
+        pcall(function()
+            playSongRemote:FireServer(assetUrl)
+        end)
+        effectiveVolume = 0
+    end
+
+    local soundObj = Instance.new("Sound")
+    soundObj.SoundId = selectedSoundId
+    soundObj.Volume = effectiveVolume
+    soundObj.PlayOnRemove = true
+    soundObj.Parent = workspace
+    soundObj:Play()
+
+    soundObj.Ended:Connect(function()
+        if playAllFEEnabled and playSongRemote then
+            pcall(function()
+                playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        local startTime = tick()
+        while soundObj.TimeLength == 0 and tick() - startTime < 2 do
+            task.wait(0.05)
+        end
+        local length = soundObj.TimeLength
+        if not length or length == 0 then
+            length = 0.5
+        end
+        task.wait(length)
+        if playAllFEEnabled and playSongRemote then
+            pcall(function()
+                playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+            end)
+        end
+    end)
+end
+
+-- Function to hook into the character's humanoid state changes
+local function setupCharacter(char)
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
+
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if humanoid then
+        connection = humanoid.StateChanged:Connect(function(old, new)
+            if customEnabled and new == Enum.HumanoidStateType.Jumping then
+                triggerJumpSound()
+            end
+        end)
+    end
+end
+
+if LocalPlayer.Character then
+    setupCharacter(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+
+-- Toggle for enabling/disabling jump sound
+jumpSoundSection:AddToggle("Jump Sound [ Client Sided ]", function(bool)
+    customEnabled = bool
+    getgenv().JumpSound_Enabled = bool
+end)
+
+-- Toggle for Play For all [ FE ]
+jumpSoundSection:AddToggle("Play For all [ FE ]", function(bool)
+    playAllFEEnabled = bool
+    getgenv().JumpSound_PlayAllFE = bool
+end)
+
+-- TextBox for custom SoundId
+jumpSoundSection:AddTextBox("Custom SoundId", function(text)
+    if text and text ~= "" then
+        if not string.find(text, "rbxassetid://") then
+            customTextboxId = "rbxassetid://" .. text
+        else
+            customTextboxId = text
+        end
+        getgenv().JumpSound_CustomId = customTextboxId
+        
+        if lastSelected == "Custom" then
+            selectedSoundId = customTextboxId
+            getgenv().JumpSound_SavedId = selectedSoundId
+        end
+    end
+end)
+
+-- Dropdown to select the custom sound
+local dropdownOptions = {}
+for _, data in ipairs(sounds) do
+    local name = string.match(data, "(.-)|%d+")
+    table.insert(dropdownOptions, name)
+end
+
+local dropdown = jumpSoundSection:AddDropdown("Select Jump Sound", dropdownOptions, function(selected)
+    lastSelected = selected
+    getgenv().JumpSound_SavedName = selected
+
+    if selected == "Custom" then
+        selectedSoundId = customTextboxId
+    else
+        for _, data in ipairs(sounds) do
+            local name, id = string.match(data, "(.-)|(%d+)")
+            if name == selected then
+                selectedSoundId = "rbxassetid://" .. id
+                break
+            end
+        end
+    end
+    getgenv().JumpSound_SavedId = selectedSoundId
+end)
+
+pcall(function() 
+    if dropdown and dropdown.Select then
+        dropdown.Select(getgenv().JumpSound_SavedName) 
+    end
+end)
+
+-- Volume Slider
+pcall(function()
+    jumpSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
+        soundVolume = value / 10
+        getgenv().JumpSound_Volume = soundVolume
+    end)
+end)
+
+-- Test Sound Effect Button
+jumpSoundSection:AddButton("Test Sound Effect", function()
+    playSound(selectedSoundId, soundVolume)
+end)
