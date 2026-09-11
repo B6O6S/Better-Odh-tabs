@@ -1,3 +1,6 @@
+-- =============================
+-- GUN SOUND CHANGER TAB
+-- =============================
 local shared = odh_shared_plugins
 
 -- Create a new section
@@ -26,6 +29,7 @@ getgenv().GunSound_CustomId = getgenv().GunSound_CustomId or nil
 getgenv().GunSound_Enabled = getgenv().GunSound_Enabled or false
 getgenv().GunSound_Volume = getgenv().GunSound_Volume or 1
 getgenv().GunSound_MuteReload = getgenv().GunSound_MuteReload or false
+getgenv().GunSound_PlayAllFE = getgenv().GunSound_PlayAllFE or false
 
 local selectedSoundId = getgenv().GunSound_SavedId
 local customEnabled = getgenv().GunSound_Enabled
@@ -33,11 +37,13 @@ local customTextboxId = getgenv().GunSound_CustomId
 local lastSelected = getgenv().GunSound_SavedName
 local soundVolume = getgenv().GunSound_Volume
 local muteReloadEnabled = getgenv().GunSound_MuteReload
+local playAllFEEnabled = getgenv().GunSound_PlayAllFE
 local connections = {}
 local reloadConnections = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 -- Function to play sound (used for testing)
@@ -69,7 +75,7 @@ local function checkReloadSound(sound)
     end
 end
 
--- Function to layer custom sound with volume
+-- Function to layer custom sound: plays client sound at volume 0 when FE is active so tracking & Ended events still work perfectly
 local function layerSound(origSound)
     if not selectedSoundId then return end
     origSound.Volume = 0
@@ -79,12 +85,53 @@ local function layerSound(origSound)
     end
 
     connections[origSound] = origSound.Played:Connect(function()
+        local pureId = string.match(selectedSoundId, "(%d+)") or "10209803"
+        local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
+        
+        local playSongRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+            and ReplicatedStorage.Remotes:FindFirstChild("Inventory") 
+            and ReplicatedStorage.Remotes.Inventory:FindFirstChild("PlaySong")
+
+        -- Determine client sound volume: 0 if FE radio is on (to avoid duplication while keeping events active), normal volume otherwise
+        local effectiveVolume = soundVolume
+        if playAllFEEnabled and playSongRemote then
+            pcall(function()
+                playSongRemote:FireServer(assetUrl)
+            end)
+            effectiveVolume = 0
+        end
+
         local custom = Instance.new("Sound")
         custom.SoundId = selectedSoundId
-        custom.Volume = soundVolume
+        custom.Volume = effectiveVolume
         custom.PlayOnRemove = true
         custom.Parent = origSound.Parent
-        custom:Destroy()
+        custom:Play()
+
+        custom.Ended:Connect(function()
+            if playAllFEEnabled and playSongRemote then
+                pcall(function()
+                    playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+                end)
+            end
+        end)
+
+        task.spawn(function()
+            local startTime = tick()
+            while custom.TimeLength == 0 and tick() - startTime < 2 do
+                task.wait(0.05)
+            end
+            local length = custom.TimeLength
+            if not length or length == 0 then
+                length = 0.5
+            end
+            task.wait(length)
+            if playAllFEEnabled and playSongRemote then
+                pcall(function()
+                    playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+                end)
+            end
+        end)
     end)
 end
 
@@ -113,12 +160,18 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- Toggle for enabling/disabling custom sounds
-gunSoundSection:AddToggle("Enable Custom Sound", function(bool)
+gunSoundSection:AddToggle("Enable Custom Sound [ Client Sided ]", function(bool)
     customEnabled = bool
-    getgenv().GunSound_Enabled = bool -- Save toggle state
+    getgenv().GunSound_Enabled = bool
     if bool then
         applySounds()
     end
+end)
+
+-- Toggle for Play For all [ FE ]
+gunSoundSection:AddToggle("Play For all [ FE ]", function(bool)
+    playAllFEEnabled = bool
+    getgenv().GunSound_PlayAllFE = bool
 end)
 
 -- Toggle for muting reload sound
@@ -139,9 +192,8 @@ gunSoundSection:AddTextBox("Custom SoundId", function(text)
             customTextboxId = text
         end
         
-        getgenv().GunSound_CustomId = customTextboxId -- Save custom text
+        getgenv().GunSound_CustomId = customTextboxId
         
-        -- If the last selected dropdown option is Custom, update immediately
         if lastSelected == "Custom" then
             selectedSoundId = customTextboxId
             getgenv().GunSound_SavedId = selectedSoundId
@@ -159,10 +211,10 @@ end
 
 local dropdown = gunSoundSection:AddDropdown("Select Sound", dropdownOptions, function(selected)
     lastSelected = selected 
-    getgenv().GunSound_SavedName = selected -- Save name selection
+    getgenv().GunSound_SavedName = selected
     
     if selected == "Custom" then
-        selectedSoundId = customTextboxId -- may be nil until user types
+        selectedSoundId = customTextboxId
     else
         for _, data in ipairs(sounds) do
             local name, id = string.match(data, "(.-)|(%d+)")
@@ -173,11 +225,10 @@ local dropdown = gunSoundSection:AddDropdown("Select Sound", dropdownOptions, fu
         end
     end
     
-    getgenv().GunSound_SavedId = selectedSoundId -- Save final ID
+    getgenv().GunSound_SavedId = selectedSoundId
     applySounds() 
 end)
 
--- Initialize dropdown with the last saved selection instead of forcing "Default"
 if dropdown and dropdown.Select then
     pcall(function()
         dropdown.Select(getgenv().GunSound_SavedName)
