@@ -1,4 +1,4 @@
--- ODH Plugin: Combined Modules
+-- ODH Plugin: Combined Modules (Optimized)
 if not odh_shared_plugins then
     warn("ODH Shared Plugins environment not found! Load the main hub first.")
     return
@@ -6,12 +6,11 @@ end
 
 local shared = odh_shared_plugins
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 --------------------------------------------------------------------------------
--- 1. Knife Sound Changer
+-- 1. Knife Sound Changer (Optimized - No Heartbeat Loop)
 --------------------------------------------------------------------------------
 do
     local knifeSoundSection = shared.AddSection("Knife Sound Changer")  
@@ -41,7 +40,9 @@ do
     local lastSelected = getgenv().KnifeSound_SavedName  
     local soundVolume = getgenv().KnifeSound_Volume
     local playAllFEEnabled = getgenv().KnifeSound_PlayAllFE
+    
     local connections = {}  
+    local processedKnifeSounds = {}
 
     -- Function to play sound (used for testing)
     local function playSound(soundId, volume)
@@ -55,7 +56,7 @@ do
     end
 
     local function layerSound(origSound)  
-        if not selectedSoundId then return end  
+        if not customEnabled or not selectedSoundId then return end  
         origSound.Volume = 0  
 
         if connections[origSound] then  
@@ -63,6 +64,7 @@ do
         end  
 
         connections[origSound] = origSound.Played:Connect(function()  
+            if not customEnabled then return end
             local pureId = string.match(selectedSoundId, "(%d+)") or "142247768"
             local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
             
@@ -112,10 +114,57 @@ do
         end)  
     end  
 
-    local function applySounds()  
-        if not customEnabled then return end  
-        local containers = {LocalPlayer.Backpack, LocalPlayer.Character}  
+    -- Setup listener for new sound instances instead of running :GetDescendants() every frame on Heartbeat
+    local function setupKnifeSoundInstance(obj)
+        if obj:IsA("Sound") and not processedKnifeSounds[obj] then
+            processedKnifeSounds[obj] = true
+            
+            if obj.Name == "Kill" then
+                layerSound(obj)
+            end
 
+            -- Clean up cache when sound is destroyed
+            obj.Destroying:Connect(function()
+                processedKnifeSounds[obj] = nil
+                if connections[obj] then
+                    connections[obj]:Disconnect()
+                    connections[obj] = nil
+                end
+            end)
+        end
+    end
+
+    local function hookContainer(container)
+        if not container then return end
+        for _, obj in ipairs(container:GetDescendants()) do
+            setupKnifeSoundInstance(obj)
+        end
+        container.DescendantAdded:Connect(setupKnifeSoundInstance)
+    end
+
+    if LocalPlayer.Backpack then
+        hookContainer(LocalPlayer.Backpack)
+    end
+    LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
+        task.spawn(function()
+            tool:WaitForChild("Handle", 2)
+            hookContainer(tool)
+        end)
+    end)
+
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        task.spawn(function()
+            char:WaitForChild("HumanoidRootPart", 5)
+            hookContainer(char)
+        end)
+    end)
+
+    if LocalPlayer.Character then
+        hookContainer(LocalPlayer.Character)
+    end
+
+    local function refreshKnifeSounds()
+        local containers = {LocalPlayer.Backpack, LocalPlayer.Character}  
         for _, container in ipairs(containers) do  
             if container then  
                 for _, obj in ipairs(container:GetDescendants()) do  
@@ -125,18 +174,12 @@ do
                 end  
             end  
         end  
-    end  
-
-    RunService.Heartbeat:Connect(function()  
-        if customEnabled then  
-            applySounds()  
-        end  
-    end)  
+    end
 
     knifeSoundSection:AddToggle("Custom Knife Sound [ Client Sided ]", function(bool)  
         customEnabled = bool  
         getgenv().KnifeSound_Enabled = bool  
-        if bool then applySounds() end  
+        if bool then refreshKnifeSounds() end  
     end)  
 
     knifeSoundSection:AddToggle("Play For all [ FE ]", function(bool)
@@ -157,7 +200,7 @@ do
             if lastSelected == "Custom" then  
                 selectedSoundId = customTextboxId  
                 getgenv().KnifeSound_SavedId = selectedSoundId  
-                applySounds()  
+                refreshKnifeSounds()  
             end  
         end  
     end)  
@@ -185,7 +228,7 @@ do
         end  
 
         getgenv().KnifeSound_SavedId = selectedSoundId  
-        applySounds()  
+        refreshKnifeSounds()  
     end)  
 
     pcall(function() 
@@ -196,7 +239,7 @@ do
 
     -- Volume Slider
     pcall(function()
-        knifeSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
+        knifeSoundSection:AddSlider("Volume", 0, 10, soundVolume * dt or soundVolume * 10, function(value)
             soundVolume = value / 10
             getgenv().KnifeSound_Volume = soundVolume
         end)
