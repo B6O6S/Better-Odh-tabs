@@ -1,31 +1,107 @@
 -- =============================
--- PART 2 (Stretch Screen & Fonts)
+-- UI, FONTS & STATS TAB
 -- =============================
 local shared = odh_shared_plugins
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local ui_tab = shared.AddSection("UI & Fonts")
 
 -- =============================
--- WIDE SCREEN TOGGLE
+-- WIDE SCREEN SETTINGS
 -- =============================
 local wideScreenEnabled = false
-local wideScreenStrength = 0.7
+local wideScreenSliderValue = 7
 
 ui_tab:AddToggle("Stretch Screen", function(on)
     wideScreenEnabled = on
 end)
 
+ui_tab:AddSlider("Stretch Screen Strength", 1, 10, wideScreenSliderValue, function(v)
+    wideScreenSliderValue = v
+end)
+
 RunService.RenderStepped:Connect(function()
     if wideScreenEnabled then
-        Camera.CFrame = Camera.CFrame * CFrame.new(0,0,0,1,0,0,0,wideScreenStrength,0,0,0,1)
+        local wideScreenStrength = wideScreenSliderValue / 10
+        Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, wideScreenStrength, 0, 0, 0, 1)
     end
 end)
 
 -- =============================
--- FONTS
+-- TRADE REQUESTS TOGGLE (DIRECT REMOTE)
+-- =============================
+local tradeRequestsEnabled = true
+local tradeEvent = ReplicatedStorage:WaitForChild("Trade"):WaitForChild("SetRequestsEnabled")
+
+ui_tab:AddToggle("Disable Trade Requests", function(on)
+    tradeRequestsEnabled = not on
+    pcall(function()
+        tradeEvent:FireServer(tradeRequestsEnabled)
+    end)
+end)
+
+-- =============================
+-- VISUAL STAT SPOOFER CONTROLS
+-- =============================
+local spooferActive = false
+local statVal1 = "0"
+local statVal2 = "0"
+local statVal3 = "0"
+
+ui_tab:AddToggle("Enable Visual Stat Spoofer", function(on)
+    spooferActive = on
+end)
+
+ui_tab:AddTextBox("Stat 1 (Murderer / Eliminations)", function(text)
+    statVal1 = tostring(text or "0")
+end)
+
+ui_tab:AddTextBox("Stat 2 (Sheriff / Saves)", function(text)
+    statVal2 = tostring(text or "0")
+end)
+
+ui_tab:AddTextBox("Stat 3 (Innocent / Survivals)", function(text)
+    statVal3 = tostring(text or "0")
+end)
+
+-- Background updating loop using broader descendants search to target stats securely
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if spooferActive then
+            pcall(function()
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                local mainGui = playerGui and playerGui:FindFirstChild("MainGUI")
+                if mainGui then
+                    for _, desc in ipairs(mainGui:GetDescendants()) do
+                        if desc.Name == "Season1Stats" or desc.Name == "Stats" or desc.Name == "Container" then
+                            local elim = desc:FindFirstChild("Eliminations")
+                            local saves = desc:FindFirstChild("Saves")
+                            local survivals = desc:FindFirstChild("Survivals")
+                            
+                            if elim and elim:FindFirstChild("Amount") then
+                                elim.Amount.Text = tostring(statVal1)
+                            end
+                            if saves and saves:FindFirstChild("Amount") then
+                                saves.Amount.Text = tostring(statVal2)
+                            end
+                            if survivals and survivals:FindFirstChild("Amount") then
+                                survivals.Amount.Text = tostring(statVal3)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- =============================
+-- FONTS SETTINGS
 -- =============================
 local fonts = {
     ["SourceSansBold (Original)"] = Enum.Font.SourceSansBold,
@@ -43,19 +119,19 @@ local fonts = {
 local selectedFont = "SourceSansBold (Original)"
 
 ui_tab:AddDropdown("Select Font", {
-    "SourceSansBold (Original)","Gotham","Arcade","Arial","ArialBold","Cartoon","Fantasy","Highway","Code","Legacy"
-}, function(option)
-    selectedFont = option
+    "SourceSansBold (Original)", "Gotham", "Arcade", "Arial", "ArialBold", "Cartoon", "Fantasy", "Highway", "Code", "Legacy"
+}, function(selected)
+    selectedFont = selected
+    local fontEnum = fonts[selectedFont] or Enum.Font.SourceSansBold
     for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
         if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
-            gui.Font = fonts[selectedFont]
+            gui.Font = fontEnum
         end
     end
 end)
 
--- Apply font to new GUI elements dynamically
 LocalPlayer.PlayerGui.DescendantAdded:Connect(function(gui)
     if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
-        gui.Font = fonts[selectedFont]
+        gui.Font = fonts[selectedFont] or Enum.Font.SourceSansBold
     end
 end)
