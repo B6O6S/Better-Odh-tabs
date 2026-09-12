@@ -1,13 +1,15 @@
+-- =============================
+-- GUN SOUND CHANGER
+-- SHOOT DETECTION ONLY
+-- =============================
 
--- =============================
--- GUN SOUND CHANGER TAB (OPTIMIZED & LAG-FREE)
--- =============================
 local shared = odh_shared_plugins
-
--- Create a new section
 local gunSoundSection = shared.AddSection("Gun Sound Changer")
 
--- Sound options (default first)
+-- =============================
+-- SOUND OPTIONS
+-- =============================
+
 local sounds = {
     "Default|10209803",
     "Meow|7148585764",
@@ -20,37 +22,75 @@ local sounds = {
     "خودلك دي|76578568305727",
     "Zrigha|97655350152777",
     "miskeen (B6O6S)|71767902510649",
-    "Custom|0" -- Placeholder for textbox input
+    "Custom|0"
 }
 
--- Use getgenv() to save the choice across script re-executions
-getgenv().GunSound_SavedId = getgenv().GunSound_SavedId or "rbxassetid://10209803"
-getgenv().GunSound_SavedName = getgenv().GunSound_SavedName or "Default"
-getgenv().GunSound_CustomId = getgenv().GunSound_CustomId or nil
-getgenv().GunSound_Enabled = getgenv().GunSound_Enabled or false
-getgenv().GunSound_Volume = getgenv().GunSound_Volume or 1
-getgenv().GunSound_MuteReload = getgenv().GunSound_MuteReload or false
-getgenv().GunSound_PlayAllFE = getgenv().GunSound_PlayAllFE or false
+-- =============================
+-- SAVED SETTINGS
+-- =============================
+
+if getgenv().GunSound_SavedId == nil then
+    getgenv().GunSound_SavedId = "rbxassetid://10209803"
+end
+
+if getgenv().GunSound_SavedName == nil then
+    getgenv().GunSound_SavedName = "Default"
+end
+
+if getgenv().GunSound_CustomId == nil then
+    getgenv().GunSound_CustomId = ""
+end
+
+if getgenv().GunSound_Enabled == nil then
+    getgenv().GunSound_Enabled = false
+end
+
+if getgenv().GunSound_Volume == nil then
+    getgenv().GunSound_Volume = 1
+end
+
+if getgenv().GunSound_MuteReload == nil then
+    getgenv().GunSound_MuteReload = false
+end
+
+if getgenv().GunSound_PlayAllFE == nil then
+    getgenv().GunSound_PlayAllFE = false
+end
 
 local selectedSoundId = getgenv().GunSound_SavedId
-local customEnabled = getgenv().GunSound_Enabled
-local customTextboxId = getgenv().GunSound_CustomId
 local lastSelected = getgenv().GunSound_SavedName
+local customTextboxId = getgenv().GunSound_CustomId
+local customEnabled = getgenv().GunSound_Enabled
 local soundVolume = getgenv().GunSound_Volume
 local muteReloadEnabled = getgenv().GunSound_MuteReload
 local playAllFEEnabled = getgenv().GunSound_PlayAllFE
+
+-- =============================
+-- SERVICES
+-- =============================
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- =============================
+-- CONNECTIONS
+-- =============================
 
 local connections = {}
 local reloadConnections = {}
 local processedSounds = {}
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer = Players.LocalPlayer
+-- =============================
+-- TEST SOUND
+-- =============================
 
--- Function to play sound (used for testing)
 local function playSound(soundId, volume)
-    if not soundId or soundId == "" then return end
+    if not soundId or soundId == "" then
+        return
+    end
+
     local soundObj = Instance.new("Sound")
     soundObj.SoundId = soundId
     soundObj.Volume = volume or 1
@@ -59,218 +99,614 @@ local function playSound(soundId, volume)
     soundObj:Destroy()
 end
 
--- Function to mute reload sound if enabled
+-- =============================
+-- GET EQUIPPED TOOL
+-- =============================
+
+local function getEquippedTool()
+    local character = LocalPlayer.Character
+
+    if not character then
+        return nil
+    end
+
+    for _, object in ipairs(character:GetChildren()) do
+        if object:IsA("Tool") then
+            return object
+        end
+    end
+
+    return nil
+end
+
+-- =============================
+-- CHECK WEAPON
+-- =============================
+
+local function hasWeaponRole()
+    local character = LocalPlayer.Character
+
+    if not character then
+        return false
+    end
+
+    local equippedTool = getEquippedTool()
+
+    if not equippedTool then
+        return false
+    end
+
+    local toolName = string.lower(equippedTool.Name)
+
+    if toolName == "gun"
+        or toolName == "revolver"
+        or toolName == "weapon"
+        or toolName == "sheriff" then
+
+        return true
+    end
+
+    -- Check if the equipped tool contains a shooting sound
+    for _, object in ipairs(equippedTool:GetDescendants()) do
+        if object:IsA("Sound") then
+
+            local soundName = string.lower(object.Name)
+
+            if soundName == "shoot"
+                or soundName == "fire"
+                or soundName == "gunshot" then
+
+                return true
+            end
+        end
+    end
+
+    -- Check PlayerData
+    local playerData = ReplicatedStorage:FindFirstChild("PlayerData")
+
+    if not playerData then
+        playerData = LocalPlayer:FindFirstChild("PlayerData")
+    end
+
+    if playerData then
+
+        local role = playerData:FindFirstChild("Role")
+
+        if not role then
+            role = playerData:FindFirstChild("CurrentRole")
+        end
+
+        if role and role:IsA("StringValue") then
+
+            local value = string.lower(role.Value)
+
+            if value == "sheriff"
+                or value == "hero"
+                or value == "gun" then
+
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+-- =============================
+-- VALID SHOOT SOUND
+-- =============================
+
+local function isValidShootSound(sound)
+
+    if not sound then
+        return false
+    end
+
+    if not sound:IsA("Sound") then
+        return false
+    end
+
+    -- Exact names only
+    local name = string.lower(sound.Name)
+
+    if name ~= "shoot"
+        and name ~= "fire"
+        and name ~= "gunshot" then
+
+        return false
+    end
+
+    -- Must have an equipped weapon
+    local equippedTool = getEquippedTool()
+
+    if not equippedTool then
+        return false
+    end
+
+    -- The shooting sound must actually be inside
+    -- the currently equipped tool
+    if not sound:IsDescendantOf(equippedTool) then
+        return false
+    end
+
+    -- Must have a sound ID
+    if not sound.SoundId or sound.SoundId == "" then
+        return false
+    end
+
+    -- Must actually have the weapon role
+    if not hasWeaponRole() then
+        return false
+    end
+
+    return true
+end
+
+-- =============================
+-- MUTE RELOAD
+-- =============================
+
 local function checkReloadSound(sound)
-    if not muteReloadEnabled then return end
+
+    if not muteReloadEnabled then
+        return
+    end
+
     local soundId = sound.SoundId
-    if soundId and (string.find(soundId, "4753414199") or soundId == "rbxassetid://4753414199") then
+
+    if soundId and string.find(soundId, "4753414199") then
+
         sound.Volume = 0
+
         if reloadConnections[sound] then
             reloadConnections[sound]:Disconnect()
         end
-        reloadConnections[sound] = sound:GetPropertyChangedSignal("Volume"):Connect(function()
-            if muteReloadEnabled then
-                sound.Volume = 0
-            end
-        end)
+
+        reloadConnections[sound] =
+            sound:GetPropertyChangedSignal("Volume"):Connect(function()
+
+                if muteReloadEnabled then
+                    sound.Volume = 0
+                end
+
+            end)
     end
 end
 
--- Function to strictly layer custom sound ONLY when the original gunshot fires
-local function layerSound(origSound)
-    if connections[origSound] then
-        connections[origSound]:Disconnect()
-        connections[origSound] = nil
+-- =============================
+-- LAYER CUSTOM SOUND
+-- =============================
+
+local function layerSound(originalSound)
+
+    if connections[originalSound] then
+        connections[originalSound]:Disconnect()
+        connections[originalSound] = nil
     end
 
-    -- Hook directly into the Played event so it only fires when the game explicitly triggers the shot sound
-    connections[origSound] = origSound.Played:Connect(function()
-        if not customEnabled or not selectedSoundId then return end
-        
-        -- Mute the original sound instantly so only the custom sound is heard
-        origSound.Volume = 0
+    connections[originalSound] =
+        originalSound.Played:Connect(function()
 
-        local pureId = string.match(selectedSoundId, "(%d+)") or "10209803"
-        local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
-        
-        local playSongRemote = ReplicatedStorage:FindFirstChild("Remotes") 
-            and ReplicatedStorage.Remotes:FindFirstChild("Inventory") 
-            and ReplicatedStorage.Remotes.Inventory:FindFirstChild("PlaySong")
+            -- Custom sound must be enabled
+            if not customEnabled then
+                return
+            end
 
-        local effectiveVolume = soundVolume
-        if playAllFEEnabled and playSongRemote then
+            -- Must have a selected sound
+            if not selectedSoundId or selectedSoundId == "" then
+                return
+            end
+
+            -- =================================
+            -- IMPORTANT:
+            -- ONLY CONTINUE IF ACTUAL SHOOTING
+            -- WAS DETECTED
+            -- =================================
+
+            if not isValidShootSound(originalSound) then
+                return
+            end
+
+            -- Mute original shooting sound
             pcall(function()
-                playSongRemote:FireServer(assetUrl)
+                originalSound.Volume = 0
             end)
-            effectiveVolume = 0
+
+            -- Get numeric ID
+            local pureId = string.match(selectedSoundId, "%d+")
+
+            if not pureId then
+                return
+            end
+
+            local assetUrl =
+                "https://www.roblox.com/asset/?id=" .. pureId
+
+            -- Find PlaySong remote
+            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+            local inventory = nil
+            local playSongRemote = nil
+
+            if remotes then
+                inventory = remotes:FindFirstChild("Inventory")
+            end
+
+            if inventory then
+                playSongRemote = inventory:FindFirstChild("PlaySong")
+            end
+
+            -- =============================
+            -- PLAY FOR ALL
+            -- =============================
+
+            local effectiveVolume = soundVolume
+
+            if playAllFEEnabled and playSongRemote then
+
+                pcall(function()
+                    playSongRemote:FireServer(assetUrl)
+                end)
+
+                effectiveVolume = 0
+            end
+
+            -- =============================
+            -- LOCAL CUSTOM SOUND
+            -- =============================
+
+            local custom = Instance.new("Sound")
+
+            custom.SoundId = selectedSoundId
+            custom.Volume = effectiveVolume
+            custom.Parent = originalSound.Parent
+
+            custom:Play()
+
+            -- =============================
+            -- CLEANUP
+            -- =============================
+
+            custom.Ended:Connect(function()
+
+                if playAllFEEnabled and playSongRemote then
+
+                    pcall(function()
+                        playSongRemote:FireServer(
+                            "https://www.roblox.com/asset/?id=0"
+                        )
+                    end)
+
+                end
+
+                pcall(function()
+                    custom:Destroy()
+                end)
+
+            end)
+
+            task.spawn(function()
+
+                local startTime = tick()
+
+                while custom.TimeLength == 0 do
+
+                    if tick() - startTime > 2 then
+                        break
+                    end
+
+                    task.wait(0.05)
+                end
+
+                local length = custom.TimeLength
+
+                if not length or length <= 0 then
+                    length = 0.5
+                end
+
+                task.wait(length + 0.1)
+
+                if playAllFEEnabled and playSongRemote then
+
+                    pcall(function()
+                        playSongRemote:FireServer(
+                            "https://www.roblox.com/asset/?id=0"
+                        )
+                    end)
+
+                end
+
+                pcall(function()
+                    if custom then
+                        custom:Destroy()
+                    end
+                end)
+
+            end)
+
+        end)
+end
+
+-- =============================
+-- SETUP SOUND
+-- =============================
+
+local function setupSoundInstance(object)
+
+    if not object:IsA("Sound") then
+        return
+    end
+
+    if processedSounds[object] then
+        return
+    end
+
+    processedSounds[object] = true
+
+    local name = string.lower(object.Name)
+
+    -- Only hook shooting sounds
+    if name == "shoot"
+        or name == "fire"
+        or name == "gunshot" then
+
+        layerSound(object)
+    end
+
+    checkReloadSound(object)
+
+    -- Cleanup when destroyed
+    object.Destroying:Connect(function()
+
+        processedSounds[object] = nil
+
+        if connections[object] then
+            connections[object]:Disconnect()
+            connections[object] = nil
         end
 
-        local custom = Instance.new("Sound")
-        custom.SoundId = selectedSoundId
-        custom.Volume = effectiveVolume
-        custom.PlayOnRemove = true
-        custom.Parent = origSound.Parent
-        custom:Play()
+        if reloadConnections[object] then
+            reloadConnections[object]:Disconnect()
+            reloadConnections[object] = nil
+        end
 
-        custom.Ended:Connect(function()
-            if playAllFEEnabled and playSongRemote then
-                pcall(function()
-                    playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
-                end)
-            end
-        end)
-
-        task.spawn(function()
-            local startTime = tick()
-            while custom.TimeLength == 0 and tick() - startTime < 2 do
-                task.wait(0.05)
-            end
-            local length = custom.TimeLength
-            if not length or length == 0 then
-                length = 0.5
-            end
-            task.wait(length)
-            if playAllFEEnabled and playSongRemote then
-                pcall(function()
-                    playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
-                end)
-            end
-        end)
     end)
 end
 
--- Setup listener for new sound instances securely without lagging
-local function setupSoundInstance(obj)
-    if obj:IsA("Sound") and not processedSounds[obj] then
-        processedSounds[obj] = true
-        
-        if obj.Name == "Gunshot" then
-            layerSound(obj)
-        end
-        checkReloadSound(obj)
+-- =============================
+-- HOOK CONTAINER
+-- =============================
 
-        -- Clean up cache when sound is destroyed
-        obj.Destroying:Connect(function()
-            processedSounds[obj] = nil
-            if connections[obj] then
-                connections[obj]:Disconnect()
-                connections[obj] = nil
-            end
-            if reloadConnections[obj] then
-                reloadConnections[obj]:Disconnect()
-                reloadConnections[obj] = nil
-            end
-        end)
-    end
-end
-
--- Connect to Backpack and Character descendant additions securely
 local function hookContainer(container)
-    if not container then return end
-    for _, obj in ipairs(container:GetDescendants()) do
-        setupSoundInstance(obj)
+
+    if not container then
+        return
     end
-    container.DescendantAdded:Connect(setupSoundInstance)
+
+    for _, object in ipairs(container:GetDescendants()) do
+        setupSoundInstance(object)
+    end
+
+    container.DescendantAdded:Connect(function(object)
+        setupSoundInstance(object)
+    end)
 end
+
+-- =============================
+-- BACKPACK
+-- =============================
 
 if LocalPlayer.Backpack then
     hookContainer(LocalPlayer.Backpack)
-end
-LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
-    task.spawn(function()
-        tool:WaitForChild("Handle", 2)
-        hookContainer(tool)
-    end)
-end)
 
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.spawn(function()
-        char:WaitForChild("HumanoidRootPart", 5)
-        hookContainer(char)
+    LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
+
+        task.spawn(function()
+
+            task.wait(0.1)
+
+            hookContainer(tool)
+
+        end)
+
     end)
+end
+
+-- =============================
+-- CHARACTER
+-- =============================
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+
+    task.spawn(function()
+
+        character:WaitForChild("HumanoidRootPart", 5)
+
+        hookContainer(character)
+
+    end)
+
 end)
 
 if LocalPlayer.Character then
     hookContainer(LocalPlayer.Character)
 end
 
--- Toggle for enabling/disabling custom sounds
-gunSoundSection:AddToggle("Enable Custom Sound [ Client Sided ]", function(bool)
-    customEnabled = bool
-    getgenv().GunSound_Enabled = bool
-end)
+-- =============================
+-- TOGGLE
+-- =============================
 
--- Toggle for Play For all [ FE ]
-gunSoundSection:AddToggle("Play For all [ FE ]", function(bool)
-    playAllFEEnabled = bool
-    getgenv().GunSound_PlayAllFE = bool
-end)
+gunSoundSection:AddToggle(
+    "Enable Custom Sound [ Client Sided ]",
+    function(bool)
 
--- Toggle for muting reload sound
-gunSoundSection:AddToggle("Mute Reload Sound", function(bool)
-    muteReloadEnabled = bool
-    getgenv().GunSound_MuteReload = bool
-end)
+        customEnabled = bool
+        getgenv().GunSound_Enabled = bool
 
--- TextBox for custom SoundId
-gunSoundSection:AddTextBox("Custom SoundId", function(text)
-    if text and text ~= "" then
-        if not string.find(text, "rbxassetid://") then
-            customTextboxId = "rbxassetid://" .. text
-        else
-            customTextboxId = text
-        end
-        
-        getgenv().GunSound_CustomId = customTextboxId
-        
-        if lastSelected == "Custom" then
-            selectedSoundId = customTextboxId
-            getgenv().GunSound_SavedId = selectedSoundId
-        end
     end
-end)
+)
 
--- Dropdown to select the custom sound
-local dropdownOptions = {}
-for _, data in ipairs(sounds) do
-    local name = string.match(data, "(.-)|%d+")
-    table.insert(dropdownOptions, name)
-end
+-- =============================
+-- PLAY FOR ALL
+-- =============================
 
-local dropdown = gunSoundSection:AddDropdown("Select Sound", dropdownOptions, function(selected)
-    lastSelected = selected 
-    getgenv().GunSound_SavedName = selected
-    
-    if selected == "Custom" then
-        selectedSoundId = customTextboxId
-    else
-        for _, data in ipairs(sounds) do
-            local name, id = string.match(data, "(.-)|(%d+)")
-            if name == selected then
-                selectedSoundId = "rbxassetid://" .. id
-                break
+gunSoundSection:AddToggle(
+    "Play For all [ FE ]",
+    function(bool)
+
+        playAllFEEnabled = bool
+        getgenv().GunSound_PlayAllFE = bool
+
+    end
+)
+
+-- =============================
+-- MUTE RELOAD
+-- =============================
+
+gunSoundSection:AddToggle(
+    "Mute Reload Sound",
+    function(bool)
+
+        muteReloadEnabled = bool
+        getgenv().GunSound_MuteReload = bool
+
+    end
+)
+
+-- =============================
+-- CUSTOM SOUND ID
+-- =============================
+
+gunSoundSection:AddTextBox(
+    "Custom SoundId",
+    function(text)
+
+        if text and text ~= "" then
+
+            if string.find(text, "rbxassetid://") then
+                customTextboxId = text
+            else
+                customTextboxId = "rbxassetid://" .. text
+            end
+
+            getgenv().GunSound_CustomId =
+                customTextboxId
+
+            if lastSelected == "Custom" then
+
+                selectedSoundId = customTextboxId
+
+                getgenv().GunSound_SavedId =
+                    selectedSoundId
+
             end
         end
-    end
-    
-    getgenv().GunSound_SavedId = selectedSoundId
-end)
 
-if dropdown and dropdown.Select then
-    pcall(function()
-        dropdown.Select(getgenv().GunSound_SavedName)
-    end)
+    end
+)
+
+-- =============================
+-- DROPDOWN
+-- =============================
+
+local dropdownOptions = {}
+
+for _, data in ipairs(sounds) do
+
+    local name = string.match(data, "^(.-)|%d+$")
+
+    if name then
+        table.insert(dropdownOptions, name)
+    end
+
 end
 
--- Volume Slider
-pcall(function()
-    gunSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
-        soundVolume = value / 10
-        getgenv().GunSound_Volume = soundVolume
+local dropdown =
+    gunSoundSection:AddDropdown(
+        "Select Sound",
+        dropdownOptions,
+        function(selected)
+
+            lastSelected = selected
+
+            getgenv().GunSound_SavedName =
+                selected
+
+            if selected == "Custom" then
+
+                selectedSoundId = customTextboxId
+
+            else
+
+                for _, data in ipairs(sounds) do
+
+                    local name, id =
+                        string.match(data, "^(.-)|(%d+)$")
+
+                    if name == selected then
+
+                        selectedSoundId =
+                            "rbxassetid://" .. id
+
+                        break
+                    end
+
+                end
+
+            end
+
+            getgenv().GunSound_SavedId =
+                selectedSoundId
+
+        end
+    )
+
+-- Restore dropdown selection
+if dropdown and dropdown.Select then
+
+    pcall(function()
+        dropdown.Select(
+            getgenv().GunSound_SavedName
+        )
     end)
+
+end
+
+-- =============================
+-- VOLUME
+-- =============================
+
+pcall(function()
+
+    gunSoundSection:AddSlider(
+        "Volume",
+        0,
+        10,
+        soundVolume * 10,
+        function(value)
+
+            soundVolume = value / 10
+
+            getgenv().GunSound_Volume =
+                soundVolume
+
+        end
+    )
+
 end)
 
--- Test Sound Effect Button
-gunSoundSection:AddButton("Test Sound Effect", function()
-    playSound(selectedSoundId, soundVolume)
-end)
+-- =============================
+-- TEST SOUND
+-- =============================
+
+gunSoundSection:AddButton(
+    "Test Sound Effect",
+    function()
+
+        playSound(
+            selectedSoundId,
+            soundVolume
+        )
+
+    end
+)
