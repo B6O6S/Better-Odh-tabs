@@ -49,6 +49,7 @@ local playAllFEEnabled = getgenv().JukeSound_PlayAllFE
 local Murder = nil
 local hasPlayedJuke = false
 local isLocalPlayerMurderer = false
+local isRoundActive = false
 
 -- Function to play sound (used for testing)
 local function playSound(soundId, volume)
@@ -63,7 +64,7 @@ end
 
 -- Function to play the custom juke sound and handle FE radio broadcast & volume sync
 local function playJukeSound()
-    if not selectedSoundId or not customEnabled then return end
+    if not selectedSoundId or not customEnabled or not isRoundActive then return end
 
     local pureId = string.match(selectedSoundId, "(%d+)") or "116630605163027"
     local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
@@ -113,10 +114,10 @@ local function playJukeSound()
     end)
 end
 
--- Function to check distance to the murderer (strict checks: only runs if local player is NOT the murderer)
+-- Function to check distance to the murderer (strict checks: round must be active and murderer must be alive)
 local lastCheck = 0
 local function checkJuke()
-    if not customEnabled or not Murder or isLocalPlayerMurderer then return end
+    if not customEnabled or not isRoundActive or not Murder or isLocalPlayerMurderer then return end
 
     local murdererPlayer = Players:FindFirstChild(Murder)
     if murdererPlayer and murdererPlayer.Character and murdererPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -138,7 +139,7 @@ local function checkJuke()
     end
 end
 
--- Background loop: Continuously track roles and cache whether the local player is the murderer
+-- Background loop: Validates active roles, round states, and eliminates post-round lagging audio
 task.spawn(function()
     local playerDataFunc = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
     while true do
@@ -146,34 +147,55 @@ task.spawn(function()
             local success, res = pcall(function()
                 return playerDataFunc:InvokeServer()
             end)
-            if success and res then
+            if success and res and type(res) == "table" then
                 local foundMurderer = nil
                 local userIsMurderer = false
+                local roundRunning = false
 
                 for playerName, data in pairs(res) do
-                    if data.Role == "Murderer" then
-                        -- Ensure the murderer is actually alive
-                        if not data.Killed and not data.Dead then
-                            foundMurderer = playerName
-                            if playerName == LocalPlayer.Name then
-                                userIsMurderer = true
+                    if data and type(data) == "table" then
+                        -- Check if any player is actively playing in the round
+                        if data.Role and data.Role ~= "Spectator" and data.Role ~= "" then
+                            roundRunning = true
+                        end
+
+                        if data.Role == "Murderer" then
+                            -- Ensure the murderer is truly spawned, active, and alive
+                            if not data.Killed and not data.Dead and data.Alive ~= false then
+                                foundMurderer = playerName
+                                if playerName == LocalPlayer.Name then
+                                    userIsMurderer = true
+                                end
                             end
                         end
-                        break
                     end
                 end
 
+                isRoundActive = roundRunning
                 Murder = foundMurderer
                 isLocalPlayerMurderer = userIsMurderer
+                
+                -- Reset trigger state immediately if round ends or murderer is dead
+                if not roundRunning or not foundMurderer then
+                    hasPlayedJuke = false
+                end
+            else
+                isRoundActive = false
+                Murder = nil
+                hasPlayedJuke = false
             end
+        else
+            isRoundActive = false
+            Murder = nil
+            hasPlayedJuke = false
         end
-        task.wait(1) -- Check role status every 1 second to eliminate network lag
+        task.wait(1) -- Check status every 1 second to stay completely lag-free
     end
 end)
 
--- Lightweight Heartbeat throttle (0.15s interval) to check proximity without frame drops
+-- Lightweight Heartbeat throttle (0.15s interval) to safely monitor distance
 RunService.Heartbeat:Connect(function(dt)
-    if not customEnabled or isLocalPlayerMurderer then return end
+    if not customEnabled or not isRoundActive or isLocalPlayerMurderer then return end
     lastCheck = lastCheck + dt
     if lastCheck >= 0.15 then
         lastCheck = 0
