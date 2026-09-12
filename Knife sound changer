@@ -1,4 +1,8 @@
--- ODH Plugin: Combined Modules (Optimized & Lag-Free)
+-- =============================
+-- ODH KILL SOUND CHANGER
+-- STRICT KILL SOUND DETECTION
+-- =============================
+
 if not odh_shared_plugins then
     warn("ODH Shared Plugins environment not found! Load the main hub first.")
     return
@@ -9,44 +13,71 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
---------------------------------------------------------------------------------
--- 1. Knife Sound Changer (Strictly Triggered on Active Play)
---------------------------------------------------------------------------------
-do
-    local knifeSoundSection = shared.AddSection("Knife Sound Changer")  
+-- =============================
+-- KILL SOUND CHANGER
+-- =============================
 
-    local sounds = {  
-        "Default|142247768",  
-        "Tom scream|133946057163378",  
-        "Cat laugh|136958794247658",  
+do
+    local killSoundSection = shared.AddSection("Knife Sound Changer")
+
+    local sounds = {
+        "Default|142247768",
+        "Tom scream|133946057163378",
+        "Cat laugh|136958794247658",
         "miskeen (B6O6S)|71767902510649",
-        "يلعن ابو لعبك (3RQ)|89850487492275",  
+        "يلعن ابو لعبك (3RQ)|89850487492275",
         "FAH|137533276939300",
         "Arabic kid|84433159756169",
-        "Custom|0"  
-    }  
+        "Custom|0"
+    }
 
-    -- Use getgenv() to save the choice across script re-executions
-    getgenv().KnifeSound_SavedId = getgenv().KnifeSound_SavedId or "rbxassetid://142247768"
-    getgenv().KnifeSound_SavedName = getgenv().KnifeSound_SavedName or "Default"
-    getgenv().KnifeSound_CustomId = getgenv().KnifeSound_CustomId or nil
-    getgenv().KnifeSound_Enabled = getgenv().KnifeSound_Enabled or false
-    getgenv().KnifeSound_Volume = getgenv().KnifeSound_Volume or 1
-    getgenv().KnifeSound_PlayAllFE = getgenv().KnifeSound_PlayAllFE or false
+    -- =============================
+    -- SAVED SETTINGS
+    -- =============================
+
+    if getgenv().KnifeSound_SavedId == nil then
+        getgenv().KnifeSound_SavedId = "rbxassetid://142247768"
+    end
+
+    if getgenv().KnifeSound_SavedName == nil then
+        getgenv().KnifeSound_SavedName = "Default"
+    end
+
+    if getgenv().KnifeSound_CustomId == nil then
+        getgenv().KnifeSound_CustomId = ""
+    end
+
+    if getgenv().KnifeSound_Enabled == nil then
+        getgenv().KnifeSound_Enabled = false
+    end
+
+    if getgenv().KnifeSound_Volume == nil then
+        getgenv().KnifeSound_Volume = 1
+    end
+
+    if getgenv().KnifeSound_PlayAllFE == nil then
+        getgenv().KnifeSound_PlayAllFE = false
+    end
 
     local selectedSoundId = getgenv().KnifeSound_SavedId
-    local customEnabled = getgenv().KnifeSound_Enabled  
-    local customTextboxId = getgenv().KnifeSound_CustomId  
-    local lastSelected = getgenv().KnifeSound_SavedName  
+    local customEnabled = getgenv().KnifeSound_Enabled
+    local customTextboxId = getgenv().KnifeSound_CustomId
+    local lastSelected = getgenv().KnifeSound_SavedName
     local soundVolume = getgenv().KnifeSound_Volume
     local playAllFEEnabled = getgenv().KnifeSound_PlayAllFE
-    
-    local connections = {}  
-    local processedKnifeSounds = {}
 
-    -- Function to play sound (used for testing)
+    local connections = {}
+    local processedKillSounds = {}
+
+    -- =============================
+    -- TEST SOUND
+    -- =============================
+
     local function playSound(soundId, volume)
-        if not soundId or soundId == "" then return end
+        if not soundId or soundId == "" then
+            return
+        end
+
         local soundObj = Instance.new("Sound")
         soundObj.SoundId = soundId
         soundObj.Volume = volume or 1
@@ -55,185 +86,466 @@ do
         soundObj:Destroy()
     end
 
-    local function layerSound(origSound)  
-        if connections[origSound] then  
-            connections[origSound]:Disconnect()  
-            connections[origSound] = nil
-        end  
+    -- =============================
+    -- VALID KILL SOUND
+    -- =============================
 
-        -- Listen strictly when the original kill sound actually starts playing
-        connections[origSound] = origSound.Played:Connect(function()  
-            if not customEnabled or not selectedSoundId then return end
-            
-            -- Instantly mute the original sound so only the custom one plays
-            origSound.Volume = 0  
+    local function isValidKillSound(sound)
+        if not sound then
+            return false
+        end
 
-            local pureId = string.match(selectedSoundId, "(%d+)") or "142247768"
-            local assetUrl = "https://www.roblox.com/asset/?id=" .. pureId
-            
-            local playSongRemote = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Inventory") 
-                and ReplicatedStorage.Remotes.Inventory:FindFirstChild("PlaySong")
+        if not sound:IsA("Sound") then
+            return false
+        end
+
+        -- Kill must be the exact name
+        if string.lower(sound.Name) ~= "kill" then
+            return false
+        end
+
+        -- It must have a real sound ID
+        if not sound.SoundId or sound.SoundId == "" then
+            return false
+        end
+
+        return true
+    end
+
+    -- =============================
+    -- LAYER SOUND
+    -- =============================
+
+    local function layerSound(originalSound)
+
+        if connections[originalSound] then
+            connections[originalSound]:Disconnect()
+            connections[originalSound] = nil
+        end
+
+        -- IMPORTANT:
+        -- This only runs when the ORIGINAL Kill sound
+        -- actually starts playing.
+        connections[originalSound] = originalSound.Played:Connect(function()
+
+            -- Custom sound must be enabled
+            if not customEnabled then
+                return
+            end
+
+            -- Must have a selected sound
+            if not selectedSoundId or selectedSoundId == "" then
+                return
+            end
+
+            -- STRICT KILL DETECTION
+            if not isValidKillSound(originalSound) then
+                return
+            end
+
+            -- =============================
+            -- MUTE ORIGINAL KILL SOUND
+            -- =============================
+
+            pcall(function()
+                originalSound.Volume = 0
+            end)
+
+            -- =============================
+            -- GET SOUND ID
+            -- =============================
+
+            local pureId = string.match(selectedSoundId, "%d+")
+
+            if not pureId then
+                return
+            end
+
+            local assetUrl =
+                "https://www.roblox.com/asset/?id=" .. pureId
+
+            -- =============================
+            -- FIND PLAYSONG REMOTE
+            -- =============================
+
+            local remotes =
+                ReplicatedStorage:FindFirstChild("Remotes")
+
+            local inventory = nil
+            local playSongRemote = nil
+
+            if remotes then
+                inventory = remotes:FindFirstChild("Inventory")
+            end
+
+            if inventory then
+                playSongRemote = inventory:FindFirstChild("PlaySong")
+            end
+
+            -- =============================
+            -- PLAY FOR ALL
+            -- =============================
 
             local effectiveVolume = soundVolume
+
             if playAllFEEnabled and playSongRemote then
+
                 pcall(function()
                     playSongRemote:FireServer(assetUrl)
                 end)
+
                 effectiveVolume = 0
             end
 
-            local custom = Instance.new("Sound")  
-            custom.SoundId = selectedSoundId  
-            custom.Volume = effectiveVolume  
-            custom.PlayOnRemove = true  
-            custom.Parent = origSound.Parent  
-            custom:Play()  
+            -- =============================
+            -- CUSTOM KILL SOUND
+            -- =============================
+
+            local custom = Instance.new("Sound")
+
+            custom.SoundId = selectedSoundId
+            custom.Volume = effectiveVolume
+            custom.Parent = originalSound.Parent
+
+            custom:Play()
+
+            -- =============================
+            -- CLEANUP
+            -- =============================
 
             custom.Ended:Connect(function()
+
                 if playAllFEEnabled and playSongRemote then
+
                     pcall(function()
-                        playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
+                        playSongRemote:FireServer(
+                            "https://www.roblox.com/asset/?id=0"
+                        )
                     end)
+
                 end
+
+                pcall(function()
+                    custom:Destroy()
+                end)
+
             end)
 
+            -- Backup cleanup in case Ended does not fire
             task.spawn(function()
+
                 local startTime = tick()
-                while custom.TimeLength == 0 and tick() - startTime < 2 do
+
+                while custom.TimeLength == 0 do
+
+                    if tick() - startTime > 2 then
+                        break
+                    end
+
                     task.wait(0.05)
                 end
+
                 local length = custom.TimeLength
-                if not length or length == 0 then
+
+                if not length or length <= 0 then
                     length = 0.5
                 end
-                task.wait(length)
-                if playAllFEEnabled and playSongRemote then
-                    pcall(function()
-                        playSongRemote:FireServer("https://www.roblox.com/asset/?id=0")
-                    end)
-                end
-            end)
-        end)  
-    end  
 
-    -- Setup listener for new sound instances securely without polling
-    local function setupKnifeSoundInstance(obj)
-        if obj:IsA("Sound") and not processedKnifeSounds[obj] then
-            processedKnifeSounds[obj] = true
-            
-            if obj.Name == "Kill" then
-                layerSound(obj)
+                task.wait(length + 0.1)
+
+                if playAllFEEnabled and playSongRemote then
+
+                    pcall(function()
+                        playSongRemote:FireServer(
+                            "https://www.roblox.com/asset/?id=0"
+                        )
+                    end)
+
+                end
+
+                pcall(function()
+                    custom:Destroy()
+                end)
+
+            end)
+
+        end)
+    end
+
+    -- =============================
+    -- SETUP KILL SOUND
+    -- =============================
+
+    local function setupKillSoundInstance(object)
+
+        if not object:IsA("Sound") then
+            return
+        end
+
+        if processedKillSounds[object] then
+            return
+        end
+
+        processedKillSounds[object] = true
+
+        -- Only connect to actual Kill sounds
+        if string.lower(object.Name) == "kill" then
+            layerSound(object)
+        end
+
+        -- Cleanup
+        object.Destroying:Connect(function()
+
+            processedKillSounds[object] = nil
+
+            if connections[object] then
+                connections[object]:Disconnect()
+                connections[object] = nil
             end
 
-            -- Clean up cache when sound is destroyed
-            obj.Destroying:Connect(function()
-                processedKnifeSounds[obj] = nil
-                if connections[obj] then
-                    connections[obj]:Disconnect()
-                    connections[obj] = nil
-                end
-            end)
-        end
+        end)
     end
+
+    -- =============================
+    -- HOOK CONTAINER
+    -- =============================
 
     local function hookContainer(container)
-        if not container then return end
-        for _, obj in ipairs(container:GetDescendants()) do
-            setupKnifeSoundInstance(obj)
+
+        if not container then
+            return
         end
-        container.DescendantAdded:Connect(setupKnifeSoundInstance)
+
+        for _, object in ipairs(container:GetDescendants()) do
+            setupKillSoundInstance(object)
+        end
+
+        container.DescendantAdded:Connect(function(object)
+            setupKillSoundInstance(object)
+        end)
     end
+
+    -- =============================
+    -- BACKPACK
+    -- =============================
 
     if LocalPlayer.Backpack then
-        hookContainer(LocalPlayer.Backpack)
-    end
-    LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
-        task.spawn(function()
-            tool:WaitForChild("Handle", 2)
-            hookContainer(tool)
-        end)
-    end)
 
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        task.spawn(function()
-            char:WaitForChild("HumanoidRootPart", 5)
-            hookContainer(char)
+        hookContainer(LocalPlayer.Backpack)
+
+        LocalPlayer.Backpack.ChildAdded:Connect(function(tool)
+
+            task.spawn(function()
+
+                task.wait(0.1)
+
+                hookContainer(tool)
+
+            end)
+
         end)
+
+    end
+
+    -- =============================
+    -- CHARACTER
+    -- =============================
+
+    LocalPlayer.CharacterAdded:Connect(function(character)
+
+        task.spawn(function()
+
+            character:WaitForChild("HumanoidRootPart", 5)
+
+            hookContainer(character)
+
+        end)
+
     end)
 
     if LocalPlayer.Character then
         hookContainer(LocalPlayer.Character)
     end
 
-    knifeSoundSection:AddToggle("Custom Knife Sound [ Client Sided ]", function(bool)  
-        customEnabled = bool  
-        getgenv().KnifeSound_Enabled = bool  
-    end)  
+    -- =============================
+    -- ENABLE CUSTOM SOUND
+    -- =============================
 
-    knifeSoundSection:AddToggle("Play For all [ FE ]", function(bool)
-        playAllFEEnabled = bool
-        getgenv().KnifeSound_PlayAllFE = bool
-    end)
+    killSoundSection:AddToggle(
+        "Custom Knife Sound [ Client Sided ]",
+        function(bool)
 
-    knifeSoundSection:AddTextBox("Custom SoundId", function(text)  
-        if text and text ~= "" then  
-            if not string.find(text, "rbxassetid://") then  
-                customTextboxId = "rbxassetid://" .. text  
-            else  
-                customTextboxId = text  
-            end  
+            customEnabled = bool
+            getgenv().KnifeSound_Enabled = bool
 
-            getgenv().KnifeSound_CustomId = customTextboxId  
-
-            if lastSelected == "Custom" then  
-                selectedSoundId = customTextboxId  
-                getgenv().KnifeSound_SavedId = selectedSoundId  
-            end  
-        end  
-    end)  
-
-    local dropdownOptions = {}  
-    for _, data in ipairs(sounds) do  
-        local name = string.match(data, "(.-)|%d+")  
-        table.insert(dropdownOptions, name)  
-    end  
-
-    local dropdown = knifeSoundSection:AddDropdown("Select Sound", dropdownOptions, function(selected)  
-        lastSelected = selected  
-        getgenv().KnifeSound_SavedName = selected  
-
-        if selected == "Custom" then  
-            selectedSoundId = customTextboxId  
-        else  
-            for _, data in ipairs(sounds) do  
-                local name, id = string.match(data, "(.-)|(%d+)")  
-                if name == selected then  
-                    selectedSoundId = "rbxassetid://" .. id  
-                    break  
-                end  
-            end  
-        end  
-
-        getgenv().KnifeSound_SavedId = selectedSoundId  
-    end)  
-
-    pcall(function() 
-        if dropdown and dropdown.Select then
-            dropdown.Select(getgenv().KnifeSound_SavedName) 
         end
-    end)
+    )
 
-    -- Volume Slider
+    -- =============================
+    -- PLAY FOR ALL
+    -- =============================
+
+    killSoundSection:AddToggle(
+        "Play For all [ FE ]",
+        function(bool)
+
+            playAllFEEnabled = bool
+            getgenv().KnifeSound_PlayAllFE = bool
+
+        end
+    )
+
+    -- =============================
+    -- CUSTOM SOUND ID
+    -- =============================
+
+    killSoundSection:AddTextBox(
+        "Custom SoundId",
+        function(text)
+
+            if text and text ~= "" then
+
+                if string.find(text, "rbxassetid://") then
+                    customTextboxId = text
+                else
+                    customTextboxId = "rbxassetid://" .. text
+                end
+
+                getgenv().KnifeSound_CustomId =
+                    customTextboxId
+
+                if lastSelected == "Custom" then
+
+                    selectedSoundId =
+                        customTextboxId
+
+                    getgenv().KnifeSound_SavedId =
+                        selectedSoundId
+
+                end
+
+            end
+
+        end
+    )
+
+    -- =============================
+    -- DROPDOWN
+    -- =============================
+
+    local dropdownOptions = {}
+
+    for _, data in ipairs(sounds) do
+
+        local name =
+            string.match(data, "^(.-)|%d+$")
+
+        if name then
+            table.insert(dropdownOptions, name)
+        end
+
+    end
+
+    local dropdown =
+        killSoundSection:AddDropdown(
+            "Select Sound",
+            dropdownOptions,
+            function(selected)
+
+                lastSelected = selected
+
+                getgenv().KnifeSound_SavedName =
+                    selected
+
+                if selected == "Custom" then
+
+                    selectedSoundId =
+                        customTextboxId
+
+                else
+
+                    for _, data in ipairs(sounds) do
+
+                        local name, id =
+                            string.match(
+                                data,
+                                "^(.-)|(%d+)$"
+                            )
+
+                        if name == selected then
+
+                            selectedSoundId =
+                                "rbxassetid://" .. id
+
+                            break
+                        end
+
+                    end
+
+                end
+
+                getgenv().KnifeSound_SavedId =
+                    selectedSoundId
+
+            end
+        )
+
+    -- =============================
+    -- RESTORE DROPDOWN
+    -- =============================
+
     pcall(function()
-        knifeSoundSection:AddSlider("Volume", 0, 10, soundVolume * 10, function(value)
-            soundVolume = value / 10
-            getgenv().KnifeSound_Volume = soundVolume
-        end)
+
+        if dropdown and dropdown.Select then
+
+            dropdown.Select(
+                getgenv().KnifeSound_SavedName
+            )
+
+        end
+
     end)
 
-    -- Test Sound Effect Button
-    knifeSoundSection:AddButton("Test Sound Effect", function()
-        playSound(selectedSoundId, soundVolume)
+    -- =============================
+    -- VOLUME
+    -- =============================
+
+    pcall(function()
+
+        killSoundSection:AddSlider(
+            "Volume",
+            0,
+            10,
+            soundVolume * 10,
+            function(value)
+
+                soundVolume = value / 10
+
+                getgenv().KnifeSound_Volume =
+                    soundVolume
+
+            end
+        )
+
     end)
+
+    -- =============================
+    -- TEST SOUND
+    -- =============================
+
+    killSoundSection:AddButton(
+        "Test Sound Effect",
+        function()
+
+            playSound(
+                selectedSoundId,
+                soundVolume
+            )
+
+        end
+    )
 end
+
+Now the trigger is specifically: "Kill" sound exists → "Kill:Played" fires → validation passes → replacement sound plays.
+
+So it will not replace/play anything just because a "Kill" Sound instance is present. The Test Sound Effect button is still intentionally able to play the selected sound manually.
