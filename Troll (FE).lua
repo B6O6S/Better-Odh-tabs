@@ -1,4 +1,4 @@
--- ===================================== -- FULL PLUGIN TAB (TROLL FE + BACKSHOTS + RC CAR + SIT) -- ===================================== 
+-- ===================================== -- PART 1: TROLL (FE) + BACKSHOTS -- ===================================== 
 if not odh_shared_plugins then
     warn("ODH Shared Plugins environment not found! Load the main hub first.")
     return
@@ -289,13 +289,14 @@ pluginTab:AddSlider("Backshots GUI Size", 50, 250, 120, function(v)
     toggleBtn.TextSize = math.clamp(math.floor(v / 8), 10, 24)
 end)
 
--- ===================================== -- DELTA RC CAR INTEGRATION -- ===================================== --
+-- ===================================== -- PART 2: DELTA RC CAR INTEGRATION -- ===================================== 
 local rcEnabled = false
 local dashcamEnabled = false
 local customSpeedEnabled = false
 local customSoundsEnabled = false
 local speedometerEnabled = false
 local sitOnCarEnabled = false
+local sitHeightOffset = 2.15
 local maxSpeedVal = 80
 local horsePowerVal = 500
 
@@ -306,7 +307,6 @@ local wasTrackingCar = false
 local trackedCarInstance = nil
 local toolActivationConn = nil
 
--- Compact Draggable Minimal Speedometer ("0 km/h")
 local speedGui = Instance.new("ScreenGui")
 speedGui.Name = "RCCarSpeedometerCompact"
 speedGui.ResetOnSpawn = false
@@ -360,6 +360,28 @@ pcall(function()
     idleSound:Play()
     drivingSound:Play()
 end)
+
+local function safeAntiFlingJump()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    
+    if hum and rootPart then
+        pcall(function()
+            rootPart.AssemblyLinearVelocity = Vector3.new(0, 5, 0)
+            rootPart.AssemblyAngularVelocity = Vector3.zero
+        end)
+        hum.Sit = false
+        hum.PlatformStand = false
+        rootPart.Anchored = false
+        task.defer(function()
+            if hum and hum.Health > 0 then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end
+end
 
 local function resetCameraToPlayer()
     Camera.CameraType = Enum.CameraType.Custom
@@ -471,8 +493,7 @@ local function updateRCState()
                     hum.PlatformStand = false
                     rootPart.Anchored = false
                     hum.Sit = true
-                    -- Tighter low sit hover offset (0.85 studs above car part)
-                    rootPart.CFrame = targetPart.CFrame * CFrame.new(0, 2, 0)
+                    rootPart.CFrame = targetPart.CFrame * CFrame.new(0, sitHeightOffset, 0)
                 end
 
                 if targetPart and not targetPart.Anchored then
@@ -560,6 +581,9 @@ local function updateRCState()
             else
                 if wasTrackingCar then
                     wasTrackingCar = false
+                    if sitOnCarEnabled then
+                        safeAntiFlingJump()
+                    end
                     resetCameraToPlayer()
                 end
                 speedGui.Enabled = false
@@ -584,6 +608,9 @@ local function updateRCState()
         lastPosition = nil
         wasTrackingCar = false
         trackedCarInstance = nil
+        if sitOnCarEnabled then
+            safeAntiFlingJump()
+        end
         setCharacterFrozen(false)
         resetCameraToPlayer()
     end
@@ -600,11 +627,15 @@ pluginTab:AddToggle("Sit on RCCar", function(on)
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local rootPart = char and char:FindFirstChild("HumanoidRootPart")
     if not on then
-        if hum then hum.Sit = false end
+        safeAntiFlingJump()
     else
         if hum then hum.PlatformStand = false end
         if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = false end
     end
+end)
+
+pluginTab:AddSlider("Sit Height Offset", 10, 500, 215, function(v)
+    sitHeightOffset = v / 100
 end)
 
 pluginTab:AddToggle("Dashcam Mode", function(on)
