@@ -1,4 +1,4 @@
--- ===================================== -- PLUGIN TAB (TROLL FE + RC CAR) -- ===================================== 
+-- ===================================== -- FULL PLUGIN TAB (TROLL FE + BACKSHOTS + RC CAR) -- ===================================== 
 if not odh_shared_plugins then
     warn("ODH Shared Plugins environment not found! Load the main hub first.")
     return
@@ -263,7 +263,6 @@ toggleBtn.MouseButton1Click:Connect(function()
     toggleBackshots(not active)
 end)
 
--- UI Options in Plugin Tab
 pluginTab:AddToggle("Show Backshots Button", function(on)
     backshotsGui.Enabled = on
     if not on and active then
@@ -302,8 +301,9 @@ local horsePowerVal = 500
 local rcConnection = nil
 local lastPosition = nil
 local lastVelCalcTime = tick()
+local wasTrackingCar = false
 
--- Compact Draggable Minimal Speedometer ("00 km/h")
+-- Compact Draggable Minimal Speedometer ("0 km/h")
 local speedGui = Instance.new("ScreenGui")
 speedGui.Name = "RCCarSpeedometerCompact"
 speedGui.ResetOnSpawn = false
@@ -391,12 +391,22 @@ local function isHoldingSpawnTool()
     return false
 end
 
+local function isOwnedCar(carModel)
+    if not carModel or not carModel:IsA("Model") or not carModel.Parent then return false end
+    return carModel.Name == LocalPlayer.Name 
+        or (carModel:FindFirstChild("Owner") and carModel.Owner.Value == LocalPlayer)
+        or (carModel:GetAttribute("Owner") == LocalPlayer.UserId)
+        or (carModel.Name == "RCCar" and isHoldingSpawnTool())
+end
+
 local function findMyCar()
     local carsFolder = workspace:FindFirstChild("RCCars")
     if carsFolder then
-        local rcCar = carsFolder:FindFirstChild("RCCar")
-        if rcCar and rcCar:IsA("Model") then return rcCar end
-        return carsFolder:FindFirstChildWhichIsA("Model")
+        for _, car in ipairs(carsFolder:GetChildren()) do
+            if car:IsA("Model") and isOwnedCar(car) then
+                return car
+            end
+        end
     end
     return nil
 end
@@ -404,13 +414,15 @@ end
 local function updateRCState()
     if rcEnabled then
         lastPosition = nil
+        wasTrackingCar = false
         if rcConnection then rcConnection:Disconnect() end
         rcConnection = RunService.RenderStepped:Connect(function()
             if not rcEnabled then return end
-            local hasTool = isHoldingSpawnTool()
             local targetCar = findMyCar()
+            local isMine = targetCar ~= nil and isOwnedCar(targetCar)
 
-            if hasTool and targetCar then
+            if targetCar and isMine then
+                wasTrackingCar = true
                 setCharacterFrozen(true)
                 local targetPart = targetCar.PrimaryPart or targetCar:FindFirstChildWhichIsA("BasePart")
                 local currentSpeedStuds = 0
@@ -498,12 +510,15 @@ local function updateRCState()
                     end
                 end
             else
+                if wasTrackingCar then
+                    wasTrackingCar = false
+                    resetCameraToPlayer()
+                end
                 speedGui.Enabled = false
                 idleSound.Volume = 0
                 drivingSound.Volume = 0
                 lastPosition = nil
                 setCharacterFrozen(false)
-                resetCameraToPlayer()
             end
         end)
     else
@@ -515,6 +530,7 @@ local function updateRCState()
             rcConnection = nil
         end
         lastPosition = nil
+        wasTrackingCar = false
         setCharacterFrozen(false)
         resetCameraToPlayer()
     end
