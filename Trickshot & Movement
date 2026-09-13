@@ -302,6 +302,7 @@ local frame, button, stroke
 local bombJumpGuiSize = 220
 local showBombJumpGui = false
 local bombUseMode = "Toggle To Use Bomb"
+local selectedBombType = "Bomb" -- "Bomb" or "Gold Bomb"
 
 if not screenGui then
 	screenGui = Instance.new("ScreenGui")
@@ -384,6 +385,10 @@ local moved = false
 button.InputBegan:Connect(function() moved = false end)
 button.InputChanged:Connect(function() moved = true end)
 
+local function getBombToolName()
+    return selectedBombType == "Gold Bomb" and "GoldBomb" or "FakeBomb"
+end
+
 local function executeBombJumpAction(isToggleMode)
 	local character = LocalPlayer.Character
 	if not character then return end
@@ -399,15 +404,16 @@ local function executeBombJumpAction(isToggleMode)
 			task.wait(0.1)
 		end
 
+		local toolName = getBombToolName()
 		local backpack = LocalPlayer:FindFirstChild("Backpack")
-		local tool = character:FindFirstChild("FakeBomb") or (backpack and backpack:FindFirstChild("FakeBomb"))
+		local tool = character:FindFirstChild(toolName) or (backpack and backpack:FindFirstChild(toolName))
 		
 		if tool then
 			if tool.Parent == backpack then
 				humanoid:EquipTool(tool)
 			end
 			
-			toyEvent:InvokeServer("FakeBomb")
+			toyEvent:InvokeServer(toolName)
 			
 			local VirtualUser = game:GetService("VirtualUser")
 			VirtualUser:Button1Down(Vector2.new(0, 0))
@@ -428,7 +434,7 @@ local function executeBombJumpAction(isToggleMode)
 		isWaitingTimer = true
 		stroke.Color = Color3.fromRGB(255, 0, 0)
 		local currentToken = timerToken
-		local waitTime = 21.7
+		local waitTime = selectedBombType == "Gold Bomb" and 3.2 or 21.7
 		local startTime = tick()
 		
 		while true do
@@ -460,6 +466,7 @@ end
 
 button.MouseButton1Click:Connect(function()
 	if moved or isWaitingTimer then return end
+	local toolName = getBombToolName()
 	
 	if bombUseMode == "Toggle To Use Bomb" then
 		isActive = not isActive
@@ -468,7 +475,7 @@ button.MouseButton1Click:Connect(function()
 			button.TextColor3 = Color3.fromRGB(50, 255, 50)
 			stroke.Color = Color3.fromRGB(50, 200, 50)
 			hasTriggered = false
-			toyEvent:InvokeServer("FakeBomb")
+			toyEvent:InvokeServer(toolName)
 		else
 			button.Text = "Bomb Jump (OFF)"
 			button.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -476,7 +483,7 @@ button.MouseButton1Click:Connect(function()
 			hasTriggered = false
 		end
 	elseif bombUseMode == "Click To Use Bomb" then
-		toyEvent:InvokeServer("FakeBomb")
+		toyEvent:InvokeServer(toolName)
 		executeBombJumpAction(false)
 	end
 end)
@@ -523,6 +530,12 @@ trickTab:AddToggle("Show Bomb Jump Button", function(on)
 	if screenGui then
 		screenGui.Enabled = on
 	end
+end)
+
+trickTab:AddDropdown("Choose Bomb Type", {"Bomb", "Gold Bomb"}, function(selected)
+	selectedBombType = selected
+	isActive = false
+	hasTriggered = false
 end)
 
 trickTab:AddDropdown("Bomb Usage Mode", {"Toggle To Use Bomb", "Click To Use Bomb"}, function(selected)
@@ -582,11 +595,9 @@ local function spawnSelectedToys()
     if not autoSpawnToysEnabled then return end
     
     task.spawn(function()
-        -- Wait for character and humanoid to fully load before attempting toy placement
         local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         char:WaitForChild("Humanoid", 5)
         
-        -- Wait until the Toys folder is loaded into Backpack
         getToysFolder()
         task.wait(0.5)
 
