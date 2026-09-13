@@ -285,11 +285,13 @@ pluginTab:AddSlider("Backshots Distance", 1, 50, 10, function(v)
 end)
 
 pluginTab:AddSlider("Backshots GUI Size", 50, 250, 120, function(v)
-    toggleBtn.Size = UDim2.new(0, v, 0, math.floor(v * (50/120)))
-    toggleBtn.TextSize = math.clamp(math.floor(v / 8), 10, 24)
+    local numV = tonumber(v) or 120
+    toggleBtn.Size = UDim2.new(0, numV, 0, math.floor(numV * (50/120)))
+    toggleBtn.TextSize = math.clamp(math.floor(numV / 8), 10, 24)
 end)
 
--- ===================================== -- PART 2: DELTA RC CAR INTEGRATION -- ===================================== 
+
+-- ===================================== -- PART 2: DELTA RC CAR INTEGRATION (ZERO-DELAY SYNC) -- ===================================== 
 local rcEnabled = false
 local dashcamEnabled = false
 local customSpeedEnabled = false
@@ -466,7 +468,7 @@ local function updateRCState()
         setupToolTracking()
 
         if rcConnection then rcConnection:Disconnect() end
-        rcConnection = RunService.RenderStepped:Connect(function()
+        rcConnection = RunService.RenderStepped:Connect(function(dt)
             if not rcEnabled then return end
             
             if trackedCarInstance and (not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance)) then
@@ -493,7 +495,11 @@ local function updateRCState()
                     hum.PlatformStand = false
                     rootPart.Anchored = false
                     hum.Sit = true
-                    rootPart.CFrame = targetPart.CFrame * CFrame.new(0, sitHeightOffset, 0)
+                    -- Velocity look-ahead prediction + fast response alpha to eliminate input lag feel
+                    local lookAheadCFrame = targetPart.CFrame + (targetPart.AssemblyLinearVelocity * math.min(dt, 0.025))
+                    local goalCFrame = lookAheadCFrame * CFrame.new(0, sitHeightOffset, 0)
+                    rootPart.CFrame = rootPart.CFrame:Lerp(goalCFrame, math.clamp(dt * 30, 0.45, 1.0))
+                    rootPart.AssemblyLinearVelocity = targetPart.AssemblyLinearVelocity
                 end
 
                 if targetPart and not targetPart.Anchored then
@@ -635,7 +641,7 @@ pluginTab:AddToggle("Sit on RCCar", function(on)
 end)
 
 pluginTab:AddSlider("Sit Height Offset", 10, 500, 215, function(v)
-    sitHeightOffset = v / 100
+    sitHeightOffset = (tonumber(v) or 215) / 100
 end)
 
 pluginTab:AddToggle("Dashcam Mode", function(on)
@@ -660,9 +666,9 @@ pluginTab:AddToggle("RCCar Speedometer", function(on)
 end)
 
 pluginTab:AddSlider("Max Speed", 1, 200, 80, function(v)
-    maxSpeedVal = v
+    maxSpeedVal = tonumber(v) or 80
 end)
 
 pluginTab:AddSlider("Horse Power ( HP )", 10, 1000, 500, function(v)
-    horsePowerVal = v
+    horsePowerVal = tonumber(v) or 500
 end)
