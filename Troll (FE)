@@ -1,4 +1,9 @@
--- ===================================== -- PLUGIN TAB -- ===================================== 
+-- ===================================== -- PLUGIN TAB (TROLL FE + RC CAR) -- ===================================== 
+if not odh_shared_plugins then
+    warn("ODH Shared Plugins environment not found! Load the main hub first.")
+    return
+end
+
 local pluginTab = odh_shared_plugins.AddSection("Troll (FE)") 
 
 local Players = game:GetService("Players") 
@@ -283,4 +288,268 @@ end)
 pluginTab:AddSlider("Backshots GUI Size", 50, 250, 120, function(v)
     toggleBtn.Size = UDim2.new(0, v, 0, math.floor(v * (50/120)))
     toggleBtn.TextSize = math.clamp(math.floor(v / 8), 10, 24)
+end)
+
+-- ===================================== -- DELTA RC CAR INTEGRATION -- ===================================== --
+local rcEnabled = false
+local dashcamEnabled = false
+local customSpeedEnabled = false
+local customSoundsEnabled = false
+local speedometerEnabled = false
+local maxSpeedVal = 80
+local horsePowerVal = 500
+
+local rcConnection = nil
+local lastPosition = nil
+local lastVelCalcTime = tick()
+
+-- Compact Draggable Minimal Speedometer ("00 km/h")
+local speedGui = Instance.new("ScreenGui")
+speedGui.Name = "RCCarSpeedometerCompact"
+speedGui.ResetOnSpawn = false
+pcall(function() speedGui.Parent = CoreGui end)
+if not speedGui.Parent then speedGui.Parent = playerGui end
+speedGui.Enabled = false
+
+local speedValueLabel = Instance.new("TextLabel")
+speedValueLabel.Size = UDim2.new(0, 110, 0, 36)
+speedValueLabel.Position = UDim2.new(0.5, -55, 0.75, 0)
+speedValueLabel.BackgroundColor3 = Color3.fromRGB(15, 18, 28)
+speedValueLabel.BackgroundTransparency = 0.25
+speedValueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedValueLabel.TextSize = 16
+speedValueLabel.Font = Enum.Font.GothamBold
+speedValueLabel.Text = "0 km/h"
+speedValueLabel.Active = true
+speedValueLabel.Draggable = true
+speedValueLabel.Parent = speedGui
+
+local labelCorner = Instance.new("UICorner")
+labelCorner.CornerRadius = UDim.new(0, 10)
+labelCorner.Parent = speedValueLabel
+
+local labelStroke = Instance.new("UIStroke")
+labelStroke.Color = Color3.fromRGB(0, 242, 254)
+labelStroke.Transparency = 0.4
+labelStroke.Thickness = 1.2
+labelStroke.Parent = speedValueLabel
+
+local idleSound = Instance.new("Sound")
+idleSound.SoundId = "rbxassetid://98076378627817"
+idleSound.Looped = true
+idleSound.Volume = 0
+
+local drivingSound = Instance.new("Sound")
+drivingSound.SoundId = "rbxassetid://140713709172971"
+drivingSound.Looped = true
+drivingSound.Volume = 0
+
+pcall(function()
+    idleSound.Parent = CoreGui
+    drivingSound.Parent = CoreGui
+end)
+if not idleSound.Parent then
+    idleSound.Parent = playerGui
+    drivingSound.Parent = playerGui
+end
+
+pcall(function()
+    idleSound:Play()
+    drivingSound:Play()
+end)
+
+local function resetCameraToPlayer()
+    Camera.CameraType = Enum.CameraType.Custom
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        Camera.CameraSubject = hum
+    end
+end
+
+local function setCharacterFrozen(isFrozen)
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = isFrozen end
+        local rootPart = char:FindFirstChild("HumanoidRootPart")
+        if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = isFrozen end
+    end
+end
+
+local function isHoldingSpawnTool()
+    local char = LocalPlayer.Character
+    if char then
+        local t = char:FindFirstChild("RCCar26")
+        if t and t:IsA("Tool") then return true end
+    end
+    local userFolder = workspace:FindFirstChild(LocalPlayer.Name)
+    if userFolder then
+        local fTool = userFolder:FindFirstChild("RCCar26")
+        if fTool and fTool:IsA("Tool") then return true end
+    end
+    return false
+end
+
+local function findMyCar()
+    local carsFolder = workspace:FindFirstChild("RCCars")
+    if carsFolder then
+        local rcCar = carsFolder:FindFirstChild("RCCar")
+        if rcCar and rcCar:IsA("Model") then return rcCar end
+        return carsFolder:FindFirstChildWhichIsA("Model")
+    end
+    return nil
+end
+
+local function updateRCState()
+    if rcEnabled then
+        lastPosition = nil
+        if rcConnection then rcConnection:Disconnect() end
+        rcConnection = RunService.RenderStepped:Connect(function()
+            if not rcEnabled then return end
+            local hasTool = isHoldingSpawnTool()
+            local targetCar = findMyCar()
+
+            if hasTool and targetCar then
+                setCharacterFrozen(true)
+                local targetPart = targetCar.PrimaryPart or targetCar:FindFirstChildWhichIsA("BasePart")
+                local currentSpeedStuds = 0
+
+                if targetPart and not targetPart.Anchored then
+                    local currentPos = targetPart.Position
+                    local measuredVelMag = targetPart.AssemblyLinearVelocity.Magnitude
+
+                    if lastPosition then
+                        local deltaT = math.clamp(tick() - lastVelCalcTime, 0.001, 0.1)
+                        local dist = (currentPos - lastPosition).Magnitude
+                        local rawVelMag = dist / deltaT
+
+                        if dist > 0.02 then
+                            local moveDir = (currentPos - lastPosition).Unit
+                            local filterList = {targetCar, LocalPlayer.Character}
+                            local result
+                            while true do
+                                local rayParams = RaycastParams.new()
+                                rayParams.FilterDescendantsInstances = filterList
+                                rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                                local tempRes = workspace:Raycast(currentPos, moveDir * 3, rayParams)
+                                if tempRes and tempRes.Instance and not tempRes.Instance.CanCollide then
+                                    table.insert(filterList, tempRes.Instance)
+                                else
+                                    result = tempRes
+                                    break
+                                end
+                            end
+
+                            if not result then
+                                if customSpeedEnabled then
+                                    local hpMultiplier = math.clamp(horsePowerVal / 500, 0.2, 2.0)
+                                    local targetVelMag = math.min(rawVelMag * hpMultiplier, maxSpeedVal)
+                                    targetPart.AssemblyLinearVelocity = moveDir * targetVelMag
+                                    currentSpeedStuds = math.floor(targetVelMag + 0.5)
+                                else
+                                    currentSpeedStuds = math.floor(math.max(measuredVelMag, rawVelMag) + 0.5)
+                                end
+                            else
+                                currentSpeedStuds = math.floor(math.max(measuredVelMag, math.min(rawVelMag, targetPart.AssemblyLinearVelocity.Magnitude)) + 0.5)
+                            end
+                        else
+                            currentSpeedStuds = math.floor(measuredVelMag + 0.5)
+                        end
+                    else
+                        currentSpeedStuds = math.floor(measuredVelMag + 0.5)
+                    end
+                    lastPosition = currentPos
+                    lastVelCalcTime = tick()
+
+                    speedGui.Enabled = speedometerEnabled
+                    local kmhVal = math.floor(currentSpeedStuds * 1.60934 + 0.5)
+                    speedValueLabel.Text = string.format("%d km/h", kmhVal)
+
+                    local alpha = math.clamp(currentSpeedStuds / math.max(maxSpeedVal, 10), 0, 1)
+                    if alpha > 0.88 then
+                        labelStroke.Color = Color3.fromRGB(255, 45, 85)
+                    else
+                        labelStroke.Color = Color3.fromRGB(0, 242, 254)
+                    end
+
+                    if customSoundsEnabled then
+                        if currentSpeedStuds > 0.8 then
+                            idleSound.Volume = 0
+                            drivingSound.Volume = math.clamp(currentSpeedStuds / 25, 0.25, 1.0)
+                            local drivingSpeedVal = math.clamp(0.6 + (currentSpeedStuds / math.max(maxSpeedVal, 10)) * 1.4, 0.6, 2.2)
+                            pcall(function() drivingSound.PlaybackSpeed = drivingSpeedVal end)
+                        else
+                            idleSound.Volume = 0.5
+                            drivingSound.Volume = 0
+                        end
+                    else
+                        idleSound.Volume = 0
+                        drivingSound.Volume = 0
+                    end
+
+                    if dashcamEnabled then
+                        Camera.CameraType = Enum.CameraType.Scriptable
+                        Camera.CFrame = targetPart.CFrame * CFrame.new(0, 0.9, -0.4)
+                    else
+                        Camera.CameraType = Enum.CameraType.Custom
+                        local hum = targetCar:FindFirstChildOfClass("Humanoid")
+                        Camera.CameraSubject = hum or targetCar
+                    end
+                end
+            else
+                speedGui.Enabled = false
+                idleSound.Volume = 0
+                drivingSound.Volume = 0
+                lastPosition = nil
+                setCharacterFrozen(false)
+                resetCameraToPlayer()
+            end
+        end)
+    else
+        speedGui.Enabled = false
+        idleSound.Volume = 0
+        drivingSound.Volume = 0
+        if rcConnection then
+            rcConnection:Disconnect()
+            rcConnection = nil
+        end
+        lastPosition = nil
+        setCharacterFrozen(false)
+        resetCameraToPlayer()
+    end
+end
+
+pluginTab:AddToggle("Spectate RCCar", function(on)
+    rcEnabled = on
+    updateRCState()
+end)
+
+pluginTab:AddToggle("Dashcam Mode", function(on)
+    dashcamEnabled = on
+end)
+
+pluginTab:AddToggle("Custom RCCar sound", function(on)
+    customSoundsEnabled = on
+end)
+
+pluginTab:AddToggle("Custom RCCar Speed", function(on)
+    customSpeedEnabled = on
+end)
+
+pluginTab:AddToggle("RCCar Speedometer", function(on)
+    speedometerEnabled = on
+    if rcEnabled then
+        speedGui.Enabled = on
+    else
+        speedGui.Enabled = false
+    end
+end)
+
+pluginTab:AddSlider("Max Speed", 1, 200, 80, function(v)
+    maxSpeedVal = v
+end)
+
+pluginTab:AddSlider("Horse Power ( HP )", 10, 1000, 500, function(v)
+    horsePowerVal = v
 end)
