@@ -368,23 +368,6 @@ pcall(function()
     drivingSound:Play()
 end)
 
-local function safeAntiFlingJump()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local rootPart = char:FindFirstChild("HumanoidRootPart")
-    
-    if hum and rootPart then
-        pcall(function()
-            rootPart.AssemblyLinearVelocity = Vector3.zero
-            rootPart.AssemblyAngularVelocity = Vector3.zero
-        end)
-        hum.Sit = false
-        hum.PlatformStand = false
-        rootPart.Anchored = false
-    end
-end
-
 local function resetCameraToPlayer()
     Camera.CameraType = Enum.CameraType.Custom
     local char = LocalPlayer.Character
@@ -490,6 +473,7 @@ local function evaluateGlobalEngineState()
                 pcall(function()
                     if trackedCarInstance and (not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance)) then
                         trackedCarInstance = nil
+                        resetCameraToPlayer()
                     end
 
                     if not trackedCarInstance and isToolEquippedInHand() then
@@ -597,6 +581,8 @@ local function evaluateGlobalEngineState()
                         idleSound.Volume = 0
                         drivingSound.Volume = 0
                         lastPosition = nil
+                        trackedCarInstance = nil
+                        resetCameraToPlayer()
                     end
                 end)
             end)
@@ -625,6 +611,23 @@ end
 local sitConnection = nil
 local freezeConnection = nil
 
+local function safeAntiFlingJump()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    
+    if hum and rootPart then
+        pcall(function()
+            rootPart.AssemblyLinearVelocity = Vector3.zero
+            rootPart.AssemblyAngularVelocity = Vector3.zero
+        end)
+        hum.Sit = false
+        hum.PlatformStand = false
+        rootPart.Anchored = false
+    end
+end
+
 local function evaluateSitState()
     if sitOnCarEnabled then
         if not sitConnection then
@@ -639,6 +642,7 @@ local function evaluateSitState()
                             wasTrackingCar = false
                         end
                         trackedCarInstance = nil
+                        resetCameraToPlayer()
                         return
                     end
 
@@ -646,6 +650,9 @@ local function evaluateSitState()
                         local found = findNearbyOwnedCar()
                         if found then
                             trackedCarInstance = found
+                        else
+                            trackedCarInstance = nil
+                            resetCameraToPlayer()
                         end
                     end
 
@@ -671,6 +678,7 @@ local function evaluateSitState()
                             safeAntiFlingJump()
                             wasTrackingCar = false
                         end
+                        resetCameraToPlayer()
                     end
                 end)
             end)
@@ -682,6 +690,7 @@ local function evaluateSitState()
         end
         wasTrackingCar = false
         safeAntiFlingJump()
+        resetCameraToPlayer()
     end
 end
 
@@ -718,6 +727,7 @@ local function evaluateFreezeState()
                         if hum and hum.PlatformStand then
                             hum.PlatformStand = false
                         end
+                        resetCameraToPlayer()
                         return
                     end
 
@@ -725,6 +735,9 @@ local function evaluateFreezeState()
                         local found = findNearbyOwnedCar()
                         if found then
                             trackedCarInstance = found
+                        else
+                            trackedCarInstance = nil
+                            resetCameraToPlayer()
                         end
                     end
 
@@ -742,6 +755,7 @@ local function evaluateFreezeState()
                         if hum and hum.PlatformStand then
                             hum.PlatformStand = false
                         end
+                        resetCameraToPlayer()
                     end
                 end)
             end)
@@ -760,6 +774,7 @@ local function evaluateFreezeState()
         if hum and hum.PlatformStand then
             hum.PlatformStand = false
         end
+        resetCameraToPlayer()
     end
 end
 
@@ -778,6 +793,7 @@ pluginTab:AddToggle("Sit on RCCar", function(on)
         trackedCarInstance = nil
         wasTrackingCar = false
         safeAntiFlingJump()
+        resetCameraToPlayer()
     end
 end)
 
