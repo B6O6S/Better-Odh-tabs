@@ -291,7 +291,7 @@ pluginTab:AddSlider("Backshots GUI Size", 50, 250, 120, function(v)
 end)
 
 
--- ===================================== -- PART 2: DELTA RC CAR INTEGRATION (LOCKED PERSISTENCE & 6-STUD RANGE) -- ===================================== 
+-- ===================================== -- PART 2: DELTA RC CAR INTEGRATION (UNFREEZE FIX) -- ===================================== 
 local rcEnabled = false
 local dashcamEnabled = false
 local customSpeedEnabled = false
@@ -371,17 +371,12 @@ local function safeAntiFlingJump()
     
     if hum and rootPart then
         pcall(function()
-            rootPart.AssemblyLinearVelocity = Vector3.new(0, 5, 0)
+            rootPart.AssemblyLinearVelocity = Vector3.zero
             rootPart.AssemblyAngularVelocity = Vector3.zero
         end)
         hum.Sit = false
         hum.PlatformStand = false
         rootPart.Anchored = false
-        task.defer(function()
-            if hum and hum.Health > 0 then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
-        end)
     end
 end
 
@@ -400,6 +395,8 @@ local function setCharacterFrozen(isFrozen)
         if char then
             local rootPart = char:FindFirstChild("HumanoidRootPart")
             if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = false end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.PlatformStand = false end
         end
         return
     end
@@ -441,7 +438,6 @@ local function isOwnedCar(carModel)
         or (carModel.Name == "RCCar" and getSpawnTool() ~= nil)
 end
 
--- Find cars spawned within 6 studs of the local player
 local function findNearbyOwnedCar()
     local char = LocalPlayer.Character
     local rootPart = char and char:FindFirstChild("HumanoidRootPart")
@@ -470,7 +466,6 @@ local function setupToolTracking()
     if tool then
         toolActivationConn = tool.Activated:Connect(function()
             task.wait(0.03)
-            -- Only acquire/lock onto car if it spawned within 6 studs and we don't already have one locked
             if not trackedCarInstance or not trackedCarInstance.Parent then
                 local nearbyCar = findNearbyOwnedCar()
                 if nearbyCar then
@@ -492,15 +487,16 @@ local function updateRCState()
         rcConnection = RunService.RenderStepped:Connect(function(dt)
             if not rcEnabled then return end
             
-            -- If tool is unequipped, immediately release the car and stop sitting
             if sitOnCarEnabled and not isToolEquippedInHand() then
-                trackedCarInstance = nil
-                wasTrackingCar = false
-                safeAntiFlingJump()
-                resetCameraToPlayer()
+                if trackedCarInstance or wasTrackingCar then
+                    trackedCarInstance = nil
+                    wasTrackingCar = false
+                    safeAntiFlingJump()
+                    resetCameraToPlayer()
+                end
+                setCharacterFrozen(false)
             end
 
-            -- If we don't have a locked car yet, check if tool is activated and car is spawned within 6 studs
             if not trackedCarInstance and isToolEquippedInHand() then
                 local found = findNearbyOwnedCar()
                 if found then
@@ -508,14 +504,13 @@ local function updateRCState()
                 end
             end
 
-            -- Ensure locked car is still valid
             if trackedCarInstance and (not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance)) then
                 trackedCarInstance = nil
             end
 
             local targetCar = trackedCarInstance
 
-            if targetCar and targetCar.Parent and isOwnedCar(targetCar) then
+            if targetCar and targetCar.Parent and isOwnedCar(targetCar) and (not sitOnCarEnabled or isToolEquippedInHand()) then
                 wasTrackingCar = true
                 setCharacterFrozen(true)
                 local targetPart = targetCar.PrimaryPart or targetCar:FindFirstChildWhichIsA("BasePart")
@@ -533,10 +528,6 @@ local function updateRCState()
                     local goalCFrame = lookAheadCFrame * CFrame.new(0, sitHeightOffset, 0)
                     rootPart.CFrame = rootPart.CFrame:Lerp(goalCFrame, math.clamp(dt * 30, 0.45, 1.0))
                     rootPart.AssemblyLinearVelocity = targetPart.AssemblyLinearVelocity
-                elseif sitOnCarEnabled and not isToolEquippedInHand() then
-                    wasTrackingCar = false
-                    safeAntiFlingJump()
-                    resetCameraToPlayer()
                 end
 
                 if targetPart and not targetPart.Anchored then
@@ -672,6 +663,7 @@ pluginTab:AddToggle("Sit on RCCar", function(on)
     if not on then
         trackedCarInstance = nil
         safeAntiFlingJump()
+        setCharacterFrozen(false)
     else
         if hum then hum.PlatformStand = false end
         if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = false end
