@@ -291,23 +291,24 @@ pluginTab:AddSlider("Backshots GUI Size", 50, 250, 120, function(v)
 end)
 
 
--- ===================================== -- PART 2: DELTA RC CAR INTEGRATION (UNFREEZE FIX) -- ===================================== 
+-- ===================================== -- PART 2: DELTA RC CAR CORE LOGIC & SOUNDS -- ===================================== 
 local rcEnabled = false
 local dashcamEnabled = false
 local customSpeedEnabled = false
 local customSoundsEnabled = false
 local speedometerEnabled = false
 local sitOnCarEnabled = false
+local freezeWhenUsingEnabled = false
 local sitHeightOffset = 2.15
 local maxSpeedVal = 80
 local horsePowerVal = 500
 
-local rcConnection = nil
+local globalEngineConnection = nil
 local lastPosition = nil
 local lastVelCalcTime = tick()
-local wasTrackingCar = false
 local trackedCarInstance = nil
 local toolActivationConn = nil
+local wasTrackingCar = false
 
 local speedGui = Instance.new("ScreenGui")
 speedGui.Name = "RCCarSpeedometerCompact"
@@ -343,11 +344,15 @@ local idleSound = Instance.new("Sound")
 idleSound.SoundId = "rbxassetid://98076378627817"
 idleSound.Looped = true
 idleSound.Volume = 0
+idleSound.RollOffMaxDistance = 100
+idleSound.RollOffMinDistance = 10
 
 local drivingSound = Instance.new("Sound")
 drivingSound.SoundId = "rbxassetid://140713709172971"
 drivingSound.Looped = true
 drivingSound.Volume = 0
+drivingSound.RollOffMaxDistance = 100
+drivingSound.RollOffMinDistance = 10
 
 pcall(function()
     idleSound.Parent = CoreGui
@@ -386,26 +391,6 @@ local function resetCameraToPlayer()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
         Camera.CameraSubject = hum
-    end
-end
-
-local function setCharacterFrozen(isFrozen)
-    if sitOnCarEnabled then
-        local char = LocalPlayer.Character
-        if char then
-            local rootPart = char:FindFirstChild("HumanoidRootPart")
-            if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = false end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = false end
-        end
-        return
-    end
-    local char = LocalPlayer.Character
-    if char then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then hum.PlatformStand = isFrozen end
-        local rootPart = char:FindFirstChild("HumanoidRootPart")
-        if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = isFrozen end
     end
 end
 
@@ -450,7 +435,7 @@ local function findNearbyOwnedCar()
                 local primary = car.PrimaryPart or car:FindFirstChildWhichIsA("BasePart")
                 if primary then
                     local dist = (primary.Position - rootPart.Position).Magnitude
-                    if dist <= 6 then
+                    if dist <= 8 then
                         return car
                     end
                 end
@@ -476,198 +461,329 @@ local function setupToolTracking()
     end
 end
 
-local function updateRCState()
-    if rcEnabled then
-        lastPosition = nil
-        wasTrackingCar = false
-        trackedCarInstance = nil
-        setupToolTracking()
-
-        if rcConnection then rcConnection:Disconnect() end
-        rcConnection = RunService.RenderStepped:Connect(function(dt)
-            if not rcEnabled then return end
-            
-            if sitOnCarEnabled and not isToolEquippedInHand() then
-                if trackedCarInstance or wasTrackingCar then
-                    trackedCarInstance = nil
-                    wasTrackingCar = false
-                    safeAntiFlingJump()
-                    resetCameraToPlayer()
-                end
-                setCharacterFrozen(false)
+local function updateSoundParent(targetPart)
+    pcall(function()
+        if targetPart and targetPart.Parent then
+            if idleSound.Parent ~= targetPart then
+                idleSound.Parent = targetPart
+                drivingSound.Parent = targetPart
             end
-
-            if not trackedCarInstance and isToolEquippedInHand() then
-                local found = findNearbyOwnedCar()
-                if found then
-                    trackedCarInstance = found
-                end
+        else
+            if idleSound.Parent ~= CoreGui then
+                idleSound.Parent = CoreGui
+                drivingSound.Parent = CoreGui
             end
+        end
+    end)
+end
 
-            if trackedCarInstance and (not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance)) then
-                trackedCarInstance = nil
-            end
+local function evaluateGlobalEngineState()
+    local needsEngine = rcEnabled or dashcamEnabled or customSpeedEnabled or customSoundsEnabled or speedometerEnabled
 
-            local targetCar = trackedCarInstance
+    if needsEngine then
+        if not globalEngineConnection then
+            setupToolTracking()
+            lastPosition = nil
+            lastVelCalcTime = tick()
 
-            if targetCar and targetCar.Parent and isOwnedCar(targetCar) and (not sitOnCarEnabled or isToolEquippedInHand()) then
-                wasTrackingCar = true
-                setCharacterFrozen(true)
-                local targetPart = targetCar.PrimaryPart or targetCar:FindFirstChildWhichIsA("BasePart")
-                local currentSpeedStuds = 0
+            globalEngineConnection = RunService.RenderStepped:Connect(function(dt)
+                pcall(function()
+                    if trackedCarInstance and (not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance)) then
+                        trackedCarInstance = nil
+                    end
 
-                local char = LocalPlayer.Character
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+                    if not trackedCarInstance and isToolEquippedInHand() then
+                        local found = findNearbyOwnedCar()
+                        if found then
+                            trackedCarInstance = found
+                        end
+                    end
 
-                if sitOnCarEnabled and hum and rootPart and targetPart and isToolEquippedInHand() then
-                    hum.PlatformStand = false
-                    rootPart.Anchored = false
-                    hum.Sit = true
-                    local lookAheadCFrame = targetPart.CFrame + (targetPart.AssemblyLinearVelocity * math.min(dt, 0.025))
-                    local goalCFrame = lookAheadCFrame * CFrame.new(0, sitHeightOffset, 0)
-                    rootPart.CFrame = rootPart.CFrame:Lerp(goalCFrame, math.clamp(dt * 30, 0.45, 1.0))
-                    rootPart.AssemblyLinearVelocity = targetPart.AssemblyLinearVelocity
-                end
+                    local targetCar = trackedCarInstance
+                    if targetCar and targetCar.Parent and isOwnedCar(targetCar) then
+                        local targetPart = targetCar.PrimaryPart or targetCar:FindFirstChildWhichIsA("BasePart")
+                        local currentSpeedStuds = 0
 
-                if targetPart and not targetPart.Anchored then
-                    local currentPos = targetPart.Position
-                    local measuredVelMag = targetPart.AssemblyLinearVelocity.Magnitude
+                        if targetPart and not targetPart.Anchored then
+                            updateSoundParent(targetPart)
+                            local currentPos = targetPart.Position
+                            local measuredVelMag = targetPart.AssemblyLinearVelocity.Magnitude
 
-                    if lastPosition then
-                        local deltaT = math.clamp(tick() - lastVelCalcTime, 0.001, 0.1)
-                        local dist = (currentPos - lastPosition).Magnitude
-                        local rawVelMag = dist / deltaT
+                            if lastPosition then
+                                local deltaT = math.clamp(tick() - lastVelCalcTime, 0.001, 0.1)
+                                local dist = (currentPos - lastPosition).Magnitude
+                                local rawVelMag = dist / deltaT
 
-                        if dist > 0.02 then
-                            local moveDir = (currentPos - lastPosition).Unit
-                            local filterList = {targetCar, LocalPlayer.Character}
-                            local result
-                            while true do
-                                local rayParams = RaycastParams.new()
-                                rayParams.FilterDescendantsInstances = filterList
-                                rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                                local tempRes = workspace:Raycast(currentPos, moveDir * 3, rayParams)
-                                if tempRes and tempRes.Instance and not tempRes.Instance.CanCollide then
-                                    table.insert(filterList, tempRes.Instance)
+                                if dist > 0.02 then
+                                    local moveDir = (currentPos - lastPosition).Unit
+                                    local filterList = {targetCar, LocalPlayer.Character}
+                                    local result
+                                    while true do
+                                        local rayParams = RaycastParams.new()
+                                        rayParams.FilterDescendantsInstances = filterList
+                                        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+                                        local tempRes = workspace:Raycast(currentPos, moveDir * 3, rayParams)
+                                        if tempRes and tempRes.Instance and not tempRes.Instance.CanCollide then
+                                            table.insert(filterList, tempRes.Instance)
+                                        else
+                                            result = tempRes
+                                            break
+                                        end
+                                    end
+
+                                    if not result then
+                                        if customSpeedEnabled then
+                                            local hpMultiplier = math.clamp(horsePowerVal / 500, 0.2, 2.0)
+                                            local targetVelMag = math.min(rawVelMag * hpMultiplier, maxSpeedVal)
+                                            targetPart.AssemblyLinearVelocity = moveDir * targetVelMag
+                                            currentSpeedStuds = math.floor(targetVelMag + 0.5)
+                                        else
+                                            currentSpeedStuds = math.floor(math.max(measuredVelMag, rawVelMag) + 0.5)
+                                        end
+                                    else
+                                        currentSpeedStuds = math.floor(math.max(measuredVelMag, math.min(rawVelMag, targetPart.AssemblyLinearVelocity.Magnitude)) + 0.5)
+                                    end
                                 else
-                                    result = tempRes
-                                    break
-                                end
-                            end
-
-                            if not result then
-                                if customSpeedEnabled then
-                                    local hpMultiplier = math.clamp(horsePowerVal / 500, 0.2, 2.0)
-                                    local targetVelMag = math.min(rawVelMag * hpMultiplier, maxSpeedVal)
-                                    targetPart.AssemblyLinearVelocity = moveDir * targetVelMag
-                                    currentSpeedStuds = math.floor(targetVelMag + 0.5)
-                                else
-                                    currentSpeedStuds = math.floor(math.max(measuredVelMag, rawVelMag) + 0.5)
+                                    currentSpeedStuds = math.floor(measuredVelMag + 0.5)
                                 end
                             else
-                                currentSpeedStuds = math.floor(math.max(measuredVelMag, math.min(rawVelMag, targetPart.AssemblyLinearVelocity.Magnitude)) + 0.5)
+                                currentSpeedStuds = math.floor(measuredVelMag + 0.5)
                             end
-                        else
-                            currentSpeedStuds = math.floor(measuredVelMag + 0.5)
+                            lastPosition = currentPos
+                            lastVelCalcTime = tick()
+
+                            speedGui.Enabled = speedometerEnabled
+                            local kmhVal = math.floor(currentSpeedStuds * 1.60934 + 0.5)
+                            speedValueLabel.Text = string.format("%d km/h", kmhVal)
+
+                            local alpha = math.clamp(currentSpeedStuds / math.max(maxSpeedVal, 10), 0, 1)
+                            if alpha > 0.88 then
+                                labelStroke.Color = Color3.fromRGB(255, 45, 85)
+                            else
+                                labelStroke.Color = Color3.fromRGB(0, 242, 254)
+                            end
+
+                            if customSoundsEnabled then
+                                if currentSpeedStuds > 0.8 then
+                                    idleSound.Volume = 0
+                                    drivingSound.Volume = math.clamp(currentSpeedStuds / 25, 0.25, 1.0)
+                                    local drivingSpeedVal = math.clamp(0.6 + (currentSpeedStuds / math.max(maxSpeedVal, 10)) * 1.4, 0.6, 2.2)
+                                    pcall(function() drivingSound.PlaybackSpeed = drivingSpeedVal end)
+                                else
+                                    idleSound.Volume = 0.5
+                                    drivingSound.Volume = 0
+                                end
+                            else
+                                idleSound.Volume = 0
+                                drivingSound.Volume = 0
+                            end
+
+                            if rcEnabled then
+                                Camera.CameraType = Enum.CameraType.Custom
+                                local humObj = targetCar:FindFirstChildOfClass("Humanoid")
+                                Camera.CameraSubject = humObj or targetCar
+                            end
+
+                            if dashcamEnabled then
+                                Camera.CameraType = Enum.CameraType.Scriptable
+                                Camera.CFrame = targetPart.CFrame * CFrame.new(0, 0.9, -0.4)
+                            elseif not rcEnabled then
+                                resetCameraToPlayer()
+                            end
                         end
                     else
-                        currentSpeedStuds = math.floor(measuredVelMag + 0.5)
-                    end
-                    lastPosition = currentPos
-                    lastVelCalcTime = tick()
-
-                    speedGui.Enabled = speedometerEnabled
-                    local kmhVal = math.floor(currentSpeedStuds * 1.60934 + 0.5)
-                    speedValueLabel.Text = string.format("%d km/h", kmhVal)
-
-                    local alpha = math.clamp(currentSpeedStuds / math.max(maxSpeedVal, 10), 0, 1)
-                    if alpha > 0.88 then
-                        labelStroke.Color = Color3.fromRGB(255, 45, 85)
-                    else
-                        labelStroke.Color = Color3.fromRGB(0, 242, 254)
-                    end
-
-                    if customSoundsEnabled then
-                        if currentSpeedStuds > 0.8 then
-                            idleSound.Volume = 0
-                            drivingSound.Volume = math.clamp(currentSpeedStuds / 25, 0.25, 1.0)
-                            local drivingSpeedVal = math.clamp(0.6 + (currentSpeedStuds / math.max(maxSpeedVal, 10)) * 1.4, 0.6, 2.2)
-                            pcall(function() drivingSound.PlaybackSpeed = drivingSpeedVal end)
-                        else
-                            idleSound.Volume = 0.5
-                            drivingSound.Volume = 0
-                        end
-                    else
+                        updateSoundParent(nil)
+                        speedGui.Enabled = false
                         idleSound.Volume = 0
                         drivingSound.Volume = 0
+                        lastPosition = nil
                     end
-
-                    if dashcamEnabled then
-                        Camera.CameraType = Enum.CameraType.Scriptable
-                        Camera.CFrame = targetPart.CFrame * CFrame.new(0, 0.9, -0.4)
-                    else
-                        Camera.CameraType = Enum.CameraType.Custom
-                        local humObj = targetCar:FindFirstChildOfClass("Humanoid")
-                        Camera.CameraSubject = humObj or targetCar
-                    end
-                end
-            else
-                if wasTrackingCar then
-                    wasTrackingCar = false
-                    if sitOnCarEnabled then
-                        safeAntiFlingJump()
-                    end
-                    resetCameraToPlayer()
-                end
-                speedGui.Enabled = false
-                idleSound.Volume = 0
-                drivingSound.Volume = 0
-                lastPosition = nil
-                setCharacterFrozen(false)
-            end
-        end)
+                end)
+            end)
+        end
     else
-        speedGui.Enabled = false
-        idleSound.Volume = 0
-        drivingSound.Volume = 0
-        if rcConnection then
-            rcConnection:Disconnect()
-            rcConnection = nil
+        if globalEngineConnection then
+            globalEngineConnection:Disconnect()
+            globalEngineConnection = nil
         end
         if toolActivationConn then
             toolActivationConn:Disconnect()
             toolActivationConn = nil
         end
+        updateSoundParent(nil)
+        speedGui.Enabled = false
+        idleSound.Volume = 0
+        drivingSound.Volume = 0
         lastPosition = nil
-        wasTrackingCar = false
         trackedCarInstance = nil
-        if sitOnCarEnabled then
-            safeAntiFlingJump()
-        end
-        setCharacterFrozen(false)
         resetCameraToPlayer()
+    end
+end
+
+
+-- ===================================== -- PART 3: RC CAR SIT, FREEZE & UI CONTROLS -- ===================================== 
+local sitConnection = nil
+local freezeConnection = nil
+
+local function evaluateSitState()
+    if sitOnCarEnabled then
+        if not sitConnection then
+            setupToolTracking()
+            sitConnection = RunService.RenderStepped:Connect(function(dt)
+                pcall(function()
+                    if not sitOnCarEnabled then return end
+
+                    if not isToolEquippedInHand() then
+                        if wasTrackingCar then
+                            safeAntiFlingJump()
+                            wasTrackingCar = false
+                        end
+                        trackedCarInstance = nil
+                        return
+                    end
+
+                    if not trackedCarInstance or not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance) then
+                        local found = findNearbyOwnedCar()
+                        if found then
+                            trackedCarInstance = found
+                        end
+                    end
+
+                    local targetCar = trackedCarInstance
+                    if targetCar and targetCar.Parent and isOwnedCar(targetCar) then
+                        wasTrackingCar = true
+                        local targetPart = targetCar.PrimaryPart or targetCar:FindFirstChildWhichIsA("BasePart")
+                        local char = LocalPlayer.Character
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+
+                        if hum and rootPart and targetPart then
+                            hum.PlatformStand = false
+                            rootPart.Anchored = false
+                            hum.Sit = true
+                            local lookAheadCFrame = targetPart.CFrame + (targetPart.AssemblyLinearVelocity * math.min(dt, 0.025))
+                            local goalCFrame = lookAheadCFrame * CFrame.new(0, sitHeightOffset, 0)
+                            rootPart.CFrame = rootPart.CFrame:Lerp(goalCFrame, math.clamp(dt * 30, 0.45, 1.0))
+                            rootPart.AssemblyLinearVelocity = targetPart.AssemblyLinearVelocity
+                        end
+                    else
+                        if wasTrackingCar then
+                            safeAntiFlingJump()
+                            wasTrackingCar = false
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        if sitConnection then
+            sitConnection:Disconnect()
+            sitConnection = nil
+        end
+        wasTrackingCar = false
+        safeAntiFlingJump()
+    end
+end
+
+local function evaluateFreezeState()
+    if freezeWhenUsingEnabled then
+        if not freezeConnection then
+            setupToolTracking()
+            freezeConnection = RunService.RenderStepped:Connect(function()
+                pcall(function()
+                    if not freezeWhenUsingEnabled then return end
+                    
+                    if sitOnCarEnabled and wasTrackingCar then
+                        local char = LocalPlayer.Character
+                        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if rootPart and rootPart:IsA("BasePart") and rootPart.Anchored then
+                            rootPart.Anchored = false
+                        end
+                        if hum and hum.PlatformStand then
+                            hum.PlatformStand = false
+                        end
+                        return
+                    end
+
+                    local char = LocalPlayer.Character
+                    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    
+                    if not isToolEquippedInHand() then
+                        trackedCarInstance = nil
+                        if rootPart and rootPart:IsA("BasePart") and rootPart.Anchored then
+                            rootPart.Anchored = false
+                        end
+                        if hum and hum.PlatformStand then
+                            hum.PlatformStand = false
+                        end
+                        return
+                    end
+
+                    if not trackedCarInstance or not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance) then
+                        local found = findNearbyOwnedCar()
+                        if found then
+                            trackedCarInstance = found
+                        end
+                    end
+
+                    if trackedCarInstance and trackedCarInstance.Parent and isOwnedCar(trackedCarInstance) then
+                        if rootPart and rootPart:IsA("BasePart") then
+                            rootPart.Anchored = true
+                        end
+                        if hum then
+                            hum.PlatformStand = true
+                        end
+                    else
+                        if rootPart and rootPart:IsA("BasePart") and rootPart.Anchored then
+                            rootPart.Anchored = false
+                        end
+                        if hum and hum.PlatformStand then
+                            hum.PlatformStand = false
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        if freezeConnection then
+            freezeConnection:Disconnect()
+            freezeConnection = nil
+        end
+        local char = LocalPlayer.Character
+        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if rootPart and rootPart:IsA("BasePart") then
+            rootPart.Anchored = false
+        end
+        if hum and hum.PlatformStand then
+            hum.PlatformStand = false
+        end
     end
 end
 
 pluginTab:AddToggle("Spectate RCCar", function(on)
     rcEnabled = on
-    updateRCState()
+    if not on and dashcamEnabled then
+        dashcamEnabled = false
+    end
+    evaluateGlobalEngineState()
 end)
 
 pluginTab:AddToggle("Sit on RCCar", function(on)
     sitOnCarEnabled = on
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    evaluateSitState()
     if not on then
         trackedCarInstance = nil
+        wasTrackingCar = false
         safeAntiFlingJump()
-        setCharacterFrozen(false)
-    else
-        if hum then hum.PlatformStand = false end
-        if rootPart and rootPart:IsA("BasePart") then rootPart.Anchored = false end
     end
+end)
+
+pluginTab:AddToggle("Freeze When Using RCCar", function(on)
+    freezeWhenUsingEnabled = on
+    evaluateFreezeState()
 end)
 
 pluginTab:AddSlider("Sit Height Offset", 10, 500, 215, function(v)
@@ -676,23 +792,25 @@ end)
 
 pluginTab:AddToggle("Dashcam Mode", function(on)
     dashcamEnabled = on
+    if on and rcEnabled then
+        rcEnabled = false
+    end
+    evaluateGlobalEngineState()
 end)
 
 pluginTab:AddToggle("Custom RCCar sound", function(on)
     customSoundsEnabled = on
+    evaluateGlobalEngineState()
 end)
 
 pluginTab:AddToggle("Custom RCCar Speed", function(on)
     customSpeedEnabled = on
+    evaluateGlobalEngineState()
 end)
 
 pluginTab:AddToggle("RCCar Speedometer", function(on)
     speedometerEnabled = on
-    if rcEnabled then
-        speedGui.Enabled = on
-    else
-        speedGui.Enabled = false
-    end
+    evaluateGlobalEngineState()
 end)
 
 pluginTab:AddSlider("Max Speed", 1, 200, 80, function(v)
@@ -702,3 +820,5 @@ end)
 pluginTab:AddSlider("Horse Power ( HP )", 10, 1000, 500, function(v)
     horsePowerVal = tonumber(v) or 500
 end)
+
+
