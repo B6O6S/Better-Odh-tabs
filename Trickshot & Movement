@@ -130,7 +130,7 @@ local function setup360Button()
     button360.Parent = screenGui360
 
     button360.MouseButton1Click:Connect(function()
-        spinOnNextJump = true -- will spin on next jump only
+        spinOnNextJump = true
     end)
 end
 
@@ -199,7 +199,6 @@ RunService.RenderStepped:Connect(function(delta)
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not HRP or not humanoid then return end
 
-    -- Automatic strafe
     if strafeEnabled then
         local moveVec = HRP.CFrame.RightVector * strafeDirection
         HRP.CFrame = HRP.CFrame + moveVec.Unit * strafeSpeed * delta
@@ -210,7 +209,6 @@ RunService.RenderStepped:Connect(function(delta)
         end
     end
 
-    -- Automatic 360 trickshot
     if trickshotEnabled then
         if humanoid:GetState() == Enum.HumanoidStateType.Freefall then
             spinning = true
@@ -246,7 +244,6 @@ local function performWallhop()
 
     if raycastResult then
         InfiniteJumpEnabled = false
-
         humanoid:ChangeState("Jumping")
         
         if backToNormalEnabled then
@@ -302,7 +299,7 @@ local frame, button, stroke
 local bombJumpGuiSize = 220
 local showBombJumpGui = false
 local bombUseMode = "Toggle To Use Bomb"
-local selectedBombType = "Bomb" -- "Bomb" or "Gold Bomb"
+local selectedBombType = "Bomb"
 
 if not screenGui then
 	screenGui = Instance.new("ScreenGui")
@@ -563,74 +560,739 @@ trickTab:AddSlider("Bomb Jump GUI Size", 100, 300, bombJumpGuiSize, function(v)
 end)
 
 -- =============================
--- TOY AUTO-SPAWN (FIXED RESPAWN LOGIC)
+-- FLICK SHOOT FEATURE
+-- PART 2 - FOR EXISTING TRICKSHOT TAB
 -- =============================
+
+local flickGui = CoreGui:FindFirstChild("AutoFlickShootDraggableGui")
+local flickFrame
+local flickButton
+local flickStroke
+
+local flickGuiSize = 220
+local showFlickGui = false
+local flickReloading = false
+
+local FLICK_RELOAD_TIME = 2.7
+local flickWallCheckEnabled = false
+
+if not flickGui then
+	flickGui = Instance.new("ScreenGui")
+	flickGui.Name = "AutoFlickShootDraggableGui"
+	flickGui.ResetOnSpawn = false
+	flickGui.Enabled = false
+	flickGui.Parent = CoreGui
+
+	flickFrame = Instance.new("Frame")
+	flickFrame.Name = "FlickFrame"
+	flickFrame.Size = UDim2.new(0, flickGuiSize, 0, flickGuiSize * (100 / 220))
+	flickFrame.Position = UDim2.new(1, -240, 1, -330)
+	flickFrame.BackgroundTransparency = 1
+	flickFrame.Parent = flickGui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 22)
+	corner.Parent = flickFrame
+
+	flickStroke = Instance.new("UIStroke")
+	flickStroke.Color = Color3.fromRGB(255, 255, 255)
+	flickStroke.Transparency = 0
+	flickStroke.Thickness = 3.5
+	flickStroke.Parent = flickFrame
+
+	flickButton = Instance.new("TextButton")
+	flickButton.Name = "FlickButton"
+	flickButton.Size = UDim2.new(1, 0, 1, 0)
+	flickButton.BackgroundTransparency = 1
+	flickButton.Text = "Flick Shoot"
+	flickButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	flickButton.TextSize = 18
+	flickButton.Font = Enum.Font.GothamBold
+	flickButton.Parent = flickFrame
+else
+	flickFrame = flickGui:FindFirstChild("FlickFrame")
+
+	if not flickFrame then
+		flickFrame = flickGui:FindFirstChildOfClass("Frame")
+	end
+
+	if flickFrame then
+		flickStroke = flickFrame:FindFirstChildOfClass("UIStroke")
+		flickButton = flickFrame:FindFirstChild("FlickButton")
+
+		if not flickButton then
+			flickButton = flickFrame:FindFirstChildOfClass("TextButton")
+		end
+	end
+end
+
+if flickButton and flickFrame then
+
+	-- =============================
+	-- DRAGGING
+	-- =============================
+
+	local flickDragging = false
+	local flickDragInput = nil
+	local flickDragStart = nil
+	local flickStartPos = nil
+	local flickMoved = false
+
+	flickButton.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+			flickDragging = true
+			flickMoved = false
+			flickDragStart = input.Position
+			flickStartPos = flickFrame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					flickDragging = false
+				end
+			end)
+		end
+	end)
+
+	flickButton.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseMovement then
+
+			flickDragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == flickDragInput and flickDragging then
+
+			local delta = input.Position - flickDragStart
+
+			if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+				flickMoved = true
+			end
+
+			flickFrame.Position = UDim2.new(
+				flickStartPos.X.Scale,
+				flickStartPos.X.Offset + delta.X,
+				flickStartPos.Y.Scale,
+				flickStartPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+
+	-- =============================
+	-- CAMERA DETECTION
+	-- =============================
+
+	local function isFirstPerson()
+
+		local camera = workspace.CurrentCamera
+
+		if not camera then
+			return false
+		end
+
+		local character = LocalPlayer.Character
+
+		if not character then
+			return false
+		end
+
+		local head = character:FindFirstChild("Head")
+
+		if not head then
+			return false
+		end
+
+		return (camera.CFrame.Position - head.Position).Magnitude <= 1
+	end
+
+	local function isShiftLock()
+
+		local success, result = pcall(function()
+			return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+		end)
+
+		return success and result == true
+	end
+
+	local function shouldSnapCamera()
+		return isFirstPerson() or isShiftLock()
+	end
+
+	-- =============================
+	-- WALL CHECK
+	-- =============================
+
+	local function hasLineOfSight(targetCharacter)
+
+		if not flickWallCheckEnabled then
+			return true
+		end
+
+		local camera = workspace.CurrentCamera
+
+		if not camera or not targetCharacter then
+			return false
+		end
+
+		local targetPart =
+			targetCharacter:FindFirstChild("HumanoidRootPart")
+			or targetCharacter:FindFirstChild("Head")
+
+		if not targetPart then
+			return false
+		end
+
+		local origin = camera.CFrame.Position
+		local targetPosition = targetPart.Position
+		local direction = targetPosition - origin
+
+		if direction.Magnitude <= 0.01 then
+			return true
+		end
+
+		local raycastParams = RaycastParams.new()
+
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+		raycastParams.FilterDescendantsInstances = {
+			LocalPlayer.Character
+		}
+		raycastParams.IgnoreWater = true
+
+		local result = workspace:Raycast(
+			origin,
+			direction,
+			raycastParams
+		)
+
+		if not result then
+			return true
+		end
+
+		return result.Instance:IsDescendantOf(targetCharacter)
+	end
+
+	-- =============================
+	-- RELOAD GUI
+	-- =============================
+
+	local normalTextColor = Color3.fromRGB(255, 255, 255)
+	local normalStrokeColor = Color3.fromRGB(255, 255, 255)
+
+	local reloadColor = Color3.fromRGB(255, 0, 0)
+
+	local function setReloadingVisuals()
+
+		flickButton.TextColor3 = reloadColor
+
+		if flickStroke then
+			flickStroke.Color = reloadColor
+		end
+	end
+
+	local function setNormalVisuals()
+
+		flickButton.TextColor3 = normalTextColor
+
+		if flickStroke then
+			flickStroke.Color = normalStrokeColor
+		end
+	end
+
+	local function startReload()
+
+		flickReloading = true
+
+		setReloadingVisuals()
+
+		local endTime = os.clock() + FLICK_RELOAD_TIME
+
+		while true do
+
+			local remaining = endTime - os.clock()
+
+			if remaining <= 0 then
+				break
+			end
+
+			flickButton.Text =
+				"Reloading... "
+				.. string.format("%.1f", remaining)
+
+			task.wait(0.05)
+		end
+
+		flickReloading = false
+
+		flickButton.Text = "Flick Shoot"
+
+		setNormalVisuals()
+	end
+
+	-- =============================
+	-- FIND MURDERER
+	-- =============================
+
+	local function findMurderer()
+
+		local players = Players:GetPlayers()
+
+		-- First: use Role
+		for _, player in ipairs(players) do
+
+			if player ~= LocalPlayer then
+
+				local success, role = pcall(function()
+					return player.Role
+				end)
+
+				if success and role == "Murderer" then
+
+					if hasLineOfSight(player.Character) then
+						return player
+					end
+
+				end
+			end
+		end
+
+		-- Second: check for Knife
+		for _, player in ipairs(players) do
+
+			if player ~= LocalPlayer then
+
+				local character = player.Character
+				local isMurderer = false
+
+				if character and character:FindFirstChild("Knife") then
+					isMurderer = true
+				end
+
+				local backpack = player:FindFirstChild("Backpack")
+
+				if backpack and backpack:FindFirstChild("Knife") then
+					isMurderer = true
+				end
+
+				if isMurderer then
+
+					if hasLineOfSight(character) then
+						return player
+					end
+
+				end
+			end
+		end
+
+		return nil
+	end
+
+	-- =============================
+	-- FLICK SHOOT
+	-- =============================
+
+	local function executeFlickShoot()
+
+		if flickReloading then
+			return
+		end
+
+		local character = LocalPlayer.Character
+
+		if not character then
+			return
+		end
+
+		local humanoid =
+			character:FindFirstChildOfClass("Humanoid")
+
+		local hrp =
+			character:FindFirstChild("HumanoidRootPart")
+
+		if not humanoid or not hrp then
+			return
+		end
+
+		local targetPlayer = findMurderer()
+
+		if not targetPlayer or not targetPlayer.Character then
+
+			if flickWallCheckEnabled then
+				flickButton.Text = "No Clear Target"
+			else
+				flickButton.Text = "No Murderer Found"
+			end
+
+			task.wait(1)
+
+			if not flickReloading then
+				flickButton.Text = "Flick Shoot"
+			end
+
+			return
+		end
+
+		local targetHrp =
+			targetPlayer.Character:FindFirstChild(
+				"HumanoidRootPart"
+			)
+
+		if not targetHrp then
+			return
+		end
+
+		-- =============================
+		-- FIND GUN
+		-- =============================
+
+		local backpack =
+			LocalPlayer:FindFirstChild("Backpack")
+
+		local gunTool =
+			character:FindFirstChild("Gun")
+			or (
+				backpack
+				and backpack:FindFirstChild("Gun")
+			)
+
+		if not gunTool then
+
+			flickButton.Text = "No Gun Found"
+
+			task.wait(1)
+
+			if not flickReloading then
+				flickButton.Text = "Flick Shoot"
+			end
+
+			return
+		end
+
+		if gunTool.Parent == backpack then
+			humanoid:EquipTool(gunTool)
+			task.wait()
+		end
+
+		-- =============================
+		-- SAVE ORIGINAL ROTATION
+		-- =============================
+
+		local originalLookVector =
+			hrp.CFrame.LookVector
+
+		local camera =
+			workspace.CurrentCamera
+
+		local snapCamera =
+			shouldSnapCamera()
+
+		local originalCameraCFrame = nil
+
+		if camera and snapCamera then
+			originalCameraCFrame = camera.CFrame
+		end
+
+		-- =============================
+		-- TARGET DIRECTION
+		-- =============================
+
+		local currentPosition = hrp.Position
+
+		local targetPosition = Vector3.new(
+			targetHrp.Position.X,
+			currentPosition.Y,
+			targetHrp.Position.Z
+		)
+
+		local direction =
+			targetPosition - currentPosition
+
+		if direction.Magnitude <= 0.01 then
+			return
+		end
+
+		direction = direction.Unit
+
+		-- =============================
+		-- ROTATE ONLY
+		-- =============================
+
+		hrp.CFrame = CFrame.lookAt(
+			currentPosition,
+			currentPosition + direction
+		)
+
+		-- =============================
+		-- CAMERA SNAP
+		-- =============================
+
+		if camera and snapCamera then
+
+			local cameraPosition =
+				camera.CFrame.Position
+
+			camera.CFrame = CFrame.lookAt(
+				cameraPosition,
+				targetHrp.Position
+			)
+		end
+
+		-- =============================
+		-- SHOOT
+		-- =============================
+
+		gunTool:Activate()
+
+		local VirtualUser =
+			game:GetService("VirtualUser")
+
+		VirtualUser:Button1Down(
+			Vector2.new(0, 0)
+		)
+
+		VirtualUser:Button1Up(
+			Vector2.new(0, 0)
+		)
+
+		task.wait(0.15)
+
+		-- =============================
+		-- RESTORE CHARACTER ROTATION
+		-- =============================
+
+		local restorePosition = hrp.Position
+
+		local flatLook = Vector3.new(
+			originalLookVector.X,
+			0,
+			originalLookVector.Z
+		)
+
+		if flatLook.Magnitude > 0.01 then
+
+			flatLook = flatLook.Unit
+
+			hrp.CFrame = CFrame.lookAt(
+				restorePosition,
+				restorePosition + flatLook
+			)
+		end
+
+		-- =============================
+		-- RESTORE CAMERA
+		-- =============================
+
+		if camera
+			and originalCameraCFrame
+			and snapCamera then
+
+			camera.CFrame =
+				originalCameraCFrame
+		end
+
+		-- =============================
+		-- UNEQUIP GUN
+		-- =============================
+
+		if gunTool.Parent == character then
+			gunTool.Parent = backpack
+		end
+
+		-- =============================
+		-- START 2.7 SECOND RELOAD
+		-- =============================
+
+		task.spawn(startReload)
+	end
+
+	-- =============================
+	-- BUTTON
+	-- =============================
+
+	flickButton.MouseButton1Click:Connect(function()
+
+		if flickMoved then
+			return
+		end
+
+		if flickReloading then
+			return
+		end
+
+		executeFlickShoot()
+	end)
+
+	-- =============================
+	-- WARNING LABEL
+	-- =============================
+
+	local warningLabel = trickTab:AddLabel(
+		"⚠️ Use Gun Silent Aim For It To Work"
+	)
+
+	-- =============================
+	-- SHOW / HIDE
+	-- =============================
+
+	trickTab:AddToggle(
+		"Show Flick Shoot Button",
+		function(on)
+
+			showFlickGui = on
+
+			if flickGui then
+				flickGui.Enabled = on
+			end
+		end
+	)
+
+	-- =============================
+	-- WALL CHECK TOGGLE
+	-- =============================
+
+	trickTab:AddToggle(
+		"Flick Wall Check",
+		function(on)
+
+			flickWallCheckEnabled = on
+		end
+	)
+
+	-- =============================
+	-- GUI SIZE
+	-- =============================
+
+	trickTab:AddSlider(
+		"Flick Shoot GUI Size",
+		100,
+		300,
+		flickGuiSize,
+		function(value)
+
+			flickGuiSize = value
+
+			if flickFrame then
+
+				flickFrame.Size = UDim2.new(
+					0,
+					flickGuiSize,
+					0,
+					flickGuiSize * (100 / 220)
+				)
+			end
+		end
+	)
+end
+
+
+-- =============================
+-- TOY AUTO-SPAWN
+-- =============================
+
 local autoSpawnToysEnabled = false
 local selectedToy1 = "None"
 local selectedToy2 = "None"
 local availableToysList = {"None"}
 
 local function getToysFolder()
-    local backpack = LocalPlayer:WaitForChild("Backpack", 5)
-    if backpack then
-        return backpack:WaitForChild("Toys", 5)
-    end
-    return nil
+
+	local backpack =
+		LocalPlayer:WaitForChild("Backpack", 5)
+
+	if backpack then
+		return backpack:WaitForChild("Toys", 5)
+	end
+
+	return nil
 end
 
 local function updateAvailableToys()
-    local toysFolder = getToysFolder()
-    local list = {"None"}
-    if toysFolder then
-        for _, toy in ipairs(toysFolder:GetChildren()) do
-            table.insert(list, toy.Name)
-        end
-    end
-    availableToysList = list
+
+	local toysFolder = getToysFolder()
+	local list = {"None"}
+
+	if toysFolder then
+
+		for _, toy in ipairs(toysFolder:GetChildren()) do
+			table.insert(list, toy.Name)
+		end
+	end
+
+	availableToysList = list
 end
 
 updateAvailableToys()
 
 local function spawnSelectedToys()
-    if not autoSpawnToysEnabled then return end
-    
-    task.spawn(function()
-        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-        char:WaitForChild("Humanoid", 5)
-        
-        getToysFolder()
-        task.wait(0.5)
 
-        if selectedToy1 and selectedToy1 ~= "None" then
-            pcall(function()
-                toyEvent:InvokeServer(selectedToy1)
-            end)
-            task.wait(0.3)
-        end
-        
-        if selectedToy2 and selectedToy2 ~= "None" then
-            pcall(function()
-                toyEvent:InvokeServer(selectedToy2)
-            end)
-        end
-    end)
+	if not autoSpawnToysEnabled then
+		return
+	end
+
+	task.spawn(function()
+
+		local character =
+			LocalPlayer.Character
+			or LocalPlayer.CharacterAdded:Wait()
+
+		character:WaitForChild("Humanoid", 5)
+
+		getToysFolder()
+
+		task.wait(0.5)
+
+		if selectedToy1
+			and selectedToy1 ~= "None" then
+
+			pcall(function()
+				toyEvent:InvokeServer(selectedToy1)
+			end)
+
+			task.wait(0.3)
+		end
+
+		if selectedToy2
+			and selectedToy2 ~= "None" then
+
+			pcall(function()
+				toyEvent:InvokeServer(selectedToy2)
+			end)
+		end
+	end)
 end
 
-LocalPlayer.CharacterAdded:Connect(function(char)
-    spawnSelectedToys()
+LocalPlayer.CharacterAdded:Connect(function()
+	spawnSelectedToys()
 end)
 
-trickTab:AddToggle("Auto Spawn Toys On Respawn", function(on)
-    autoSpawnToysEnabled = on
-    if on then
-        spawnSelectedToys()
-    end
-end)
+trickTab:AddToggle(
+	"Auto Spawn Toys On Respawn",
+	function(on)
 
-trickTab:AddDropdown("Select Toy Slot 1", availableToysList, function(selected)
-    selectedToy1 = selected
-end)
+		autoSpawnToysEnabled = on
 
-trickTab:AddDropdown("Select Toy Slot 2", availableToysList, function(selected)
-    selectedToy2 = selected
-end)
+		if on then
+			spawnSelectedToys()
+		end
+	end
+)
+
+trickTab:AddDropdown(
+	"Select Toy Slot 1",
+	availableToysList,
+	function(selected)
+
+		selectedToy1 = selected
+	end
+)
+
+trickTab:AddDropdown(
+	"Select Toy Slot 2",
+	availableToysList,
+	function(selected)
+
+		selectedToy2 = selected
+	end
+)
