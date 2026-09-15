@@ -20,6 +20,8 @@ local isJumping = false
 local selectedEmoteId
 local toggleSize = 80
 
+local onlyWorkSideways = false
+
 local Character
 local Humanoid
 local HRP
@@ -60,6 +62,7 @@ LocalPlayer.CharacterAdded:Connect(bindCharacter)
 
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
+
     if input.KeyCode == Enum.KeyCode.A then
         moveInput = -1
     elseif input.KeyCode == Enum.KeyCode.D then
@@ -69,7 +72,9 @@ end)
 
 UserInputService.InputEnded:Connect(function(input, gp)
     if gp then return end
-    if input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.D then
+
+    if input.KeyCode == Enum.KeyCode.A
+        or input.KeyCode == Enum.KeyCode.D then
         moveInput = 0
     end
 end)
@@ -80,6 +85,7 @@ end)
 
 local function playEmote(id)
     if not Character then return end
+
     local hum = Character:FindFirstChildOfClass("Humanoid")
     if not hum then return end
 
@@ -92,7 +98,10 @@ local function playEmote(id)
         anim.AnimationId = "rbxassetid://" .. id
 
         local track = hum:LoadAnimation(anim)
-        if track then track:Play() end
+
+        if track then
+            track:Play()
+        end
     end
 end
 
@@ -105,19 +114,72 @@ RunService.Heartbeat:Connect(function()
     if not Character or not Humanoid or not HRP then return end
     if not isJumping then return end
 
-    local dir = moveInput
+    local moveDirection = Humanoid.MoveDirection
 
-    if dir == 0 and Humanoid.MoveDirection.Magnitude > 0 then
-        local cf = CFrame.new(Vector3.new(), Camera.CFrame.LookVector)
-        dir = (cf.RightVector:Dot(Humanoid.MoveDirection) > 0) and 1 or -1
+    if moveDirection.Magnitude <= 0 then
+        return
     end
 
-    if dir ~= 0 then
+    local directionToUse
+
+    ------------------------------------------------------------
+    -- ONLY WORK SIDEWAYS
+    ------------------------------------------------------------
+
+    if onlyWorkSideways then
+
+        -- Get camera's horizontal right direction
         local right = Camera.CFrame.RightVector
-        local flat = Vector3.new(right.X, 0, right.Z).Unit
+        local flatRight = Vector3.new(
+            right.X,
+            0,
+            right.Z
+        )
 
-        HRP.Velocity = flat * (dir * sideSpeed) + Vector3.new(0, HRP.Velocity.Y, 0)
+        if flatRight.Magnitude <= 0 then
+            return
+        end
+
+        flatRight = flatRight.Unit
+
+        -- Check how much the player is moving sideways
+        local sidewaysAmount = flatRight:Dot(moveDirection)
+
+        -- Only activate when movement is actually sideways
+        if math.abs(sidewaysAmount) < 0.35 then
+            return
+        end
+
+        -- Determine left/right direction
+        local sideDirection
+
+        if sidewaysAmount > 0 then
+            sideDirection = 1
+        else
+            sideDirection = -1
+        end
+
+        directionToUse = flatRight * sideDirection
+
+    ------------------------------------------------------------
+    -- NORMAL MODE
+    ------------------------------------------------------------
+
+    else
+
+        -- When Only Work Sideways is OFF,
+        -- use whatever direction the player is moving.
+        directionToUse = moveDirection.Unit
+
     end
+
+    ------------------------------------------------------------
+    -- APPLY SPEED
+    ------------------------------------------------------------
+
+    HRP.Velocity =
+        directionToUse * sideSpeed
+        + Vector3.new(0, HRP.Velocity.Y, 0)
 end)
 
 ----------------------------------------------------------------
@@ -137,13 +199,24 @@ local emotes = {
 
 local function updateButtonVisual()
     if not toggleButton then return end
-    toggleButton.BackgroundColor3 = enabled and Color3.fromRGB(0,200,0) or Color3.fromRGB(200,0,0)
+
+    toggleButton.BackgroundColor3 =
+        enabled
+        and Color3.fromRGB(0, 200, 0)
+        or Color3.fromRGB(200, 0, 0)
 end
 
 function createToggleButton()
+
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return end
-    if screenGui and toggleButton then return end
+
+    if not playerGui then
+        return
+    end
+
+    if screenGui and toggleButton then
+        return
+    end
 
     screenGui = Instance.new("ScreenGui")
     screenGui.Name = "SpeedGlitchUI"
@@ -151,10 +224,27 @@ function createToggleButton()
     screenGui.Parent = playerGui
 
     toggleButton = Instance.new("TextButton")
-    toggleButton.Size = UDim2.new(0, toggleSize, 0, toggleSize)
-    toggleButton.Position = UDim2.new(0.5, -(toggleSize/2), 0.7, 0)
-    toggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    toggleButton.TextColor3 = Color3.fromRGB(255,255,255)
+
+    toggleButton.Size = UDim2.new(
+        0,
+        toggleSize,
+        0,
+        toggleSize
+    )
+
+    toggleButton.Position = UDim2.new(
+        0.5,
+        -(toggleSize / 2),
+        0.7,
+        0
+    )
+
+    toggleButton.BackgroundColor3 =
+        Color3.fromRGB(200, 0, 0)
+
+    toggleButton.TextColor3 =
+        Color3.fromRGB(255, 255, 255)
+
     toggleButton.TextScaled = true
     toggleButton.Text = "Speed Glitch"
     toggleButton.BorderSizePixel = 0
@@ -162,43 +252,52 @@ function createToggleButton()
     toggleButton.Parent = screenGui
 
     local stroke = Instance.new("UIStroke")
+
     stroke.Thickness = 1
-    stroke.Color = Color3.fromRGB(0,0,0)
+    stroke.Color = Color3.fromRGB(0, 0, 0)
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = toggleButton
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0,0)
+
+    corner.CornerRadius = UDim.new(0, 0)
     corner.Parent = toggleButton
 
     toggleButton.Active = true
     toggleButton.Draggable = true
 
     toggleButton.MouseButton1Click:Connect(function()
+
         enabled = not enabled
+
         updateButtonVisual()
 
         if enabled and selectedEmoteId then
             playEmote(selectedEmoteId)
         end
+
     end)
 
     updateButtonVisual()
 end
 
 function destroyToggleButton()
+
     if screenGui then
         screenGui:Destroy()
     end
+
     screenGui = nil
     toggleButton = nil
     enabled = false
 end
+
 ----------------------------------------------------------------
 -- UI CONTROLS
 ----------------------------------------------------------------
 
 speedSection:AddToggle("Enable Speed Glitch UI", function(v)
+
     uiEnabled = v
 
     if v then
@@ -206,42 +305,102 @@ speedSection:AddToggle("Enable Speed Glitch UI", function(v)
     else
         destroyToggleButton()
     end
+
 end)
 
-speedSection:AddSlider("Side Speed", 10, 1000, sideSpeed, function(v)
-    sideSpeed = v
+----------------------------------------------------------------
+-- ONLY WORK SIDEWAYS
+----------------------------------------------------------------
+
+speedSection:AddToggle("Only Work Sideways", function(v)
+
+    onlyWorkSideways = v
+
 end)
 
-speedSection:AddSlider("Toggle Size", 40, 150, toggleSize, function(v)
-    toggleSize = v
+----------------------------------------------------------------
+-- SIDE SPEED
+----------------------------------------------------------------
 
-    if toggleButton then
-        toggleButton.Size = UDim2.new(0, toggleSize, 0, toggleSize)
-        toggleButton.Position = UDim2.new(0.5, -(toggleSize/2), 0.7, 0)
+speedSection:AddSlider(
+    "Side Speed",
+    10,
+    1000,
+    sideSpeed,
+    function(v)
+        sideSpeed = v
     end
-end)
+)
 
--- DROPDOWN (WITH CUSTOM)
+----------------------------------------------------------------
+-- TOGGLE SIZE
+----------------------------------------------------------------
+
+speedSection:AddSlider(
+    "Toggle Size",
+    40,
+    150,
+    toggleSize,
+    function(v)
+
+        toggleSize = v
+
+        if toggleButton then
+
+            toggleButton.Size = UDim2.new(
+                0,
+                toggleSize,
+                0,
+                toggleSize
+            )
+
+            toggleButton.Position = UDim2.new(
+                0.5,
+                -(toggleSize / 2),
+                0.7,
+                0
+            )
+
+        end
+
+    end
+)
+
+----------------------------------------------------------------
+-- DROPDOWN
+----------------------------------------------------------------
+
 speedSection:AddDropdown("Select Emote", {
+
     "Moonwalk",
     "Happier Jump",
     "Bouncy Twirl",
     "Flex Walk",
     "Custom"
+
 }, function(choice)
+
     if choice == "Custom" then
         selectedEmoteId = customEmoteId
     else
         selectedEmoteId = emotes[choice]
     end
+
 end)
 
--- TEXTBOX (AUTO USE CUSTOM)
+----------------------------------------------------------------
+-- CUSTOM EMOTE
+----------------------------------------------------------------
+
 speedSection:AddTextBox("Custom Emote ID", function(text)
+
     if text and text ~= "" then
+
         customEmoteId = text
         selectedEmoteId = text
+
     end
+
 end)
 
 ----------------------------------------------------------------
@@ -249,16 +408,31 @@ end)
 ----------------------------------------------------------------
 
 task.spawn(function()
+
     while true do
+
         task.wait(1)
 
         if uiEnabled then
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
 
-            if playerGui and (not screenGui or not screenGui.Parent or not toggleButton) then
+            local playerGui =
+                LocalPlayer:FindFirstChild("PlayerGui")
+
+            if playerGui
+                and (
+                    not screenGui
+                    or not screenGui.Parent
+                    or not toggleButton
+                )
+            then
+
                 destroyToggleButton()
                 createToggleButton()
+
             end
+
         end
+
     end
+
 end)
