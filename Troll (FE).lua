@@ -309,6 +309,7 @@ local lastVelCalcTime = tick()
 local trackedCarInstance = nil
 local toolActivationConn = nil
 local wasTrackingCar = false
+local isSpectatingPlayer = false
 
 local speedGui = Instance.new("ScreenGui")
 speedGui.Name = "RCCarSpeedometerCompact"
@@ -368,7 +369,24 @@ pcall(function()
     drivingSound:Play()
 end)
 
+-- External spectate detector (detects if user is viewing another player's character)
+Camera:GetPropertyChangedSignal("CameraSubject"):Connect(function()
+    local subject = Camera.CameraSubject
+    if subject and subject:IsA("Humanoid") then
+        local char = subject.Parent
+        if char and char ~= LocalPlayer.Character then
+            local p = Players:GetPlayerFromCharacter(char)
+            if p then
+                isSpectatingPlayer = true
+                return
+            end
+        end
+    end
+    isSpectatingPlayer = false
+end)
+
 local function resetCameraToPlayer()
+    if isSpectatingPlayer then return end
     Camera.CameraType = Enum.CameraType.Custom
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -471,6 +489,8 @@ local function evaluateGlobalEngineState()
 
             globalEngineConnection = RunService.RenderStepped:Connect(function(dt)
                 pcall(function()
+                    if isSpectatingPlayer then return end
+
                     if trackedCarInstance and (not trackedCarInstance.Parent or not isOwnedCar(trackedCarInstance)) then
                         trackedCarInstance = nil
                         resetCameraToPlayer()
@@ -562,16 +582,16 @@ local function evaluateGlobalEngineState()
                                 drivingSound.Volume = 0
                             end
 
-                            if rcEnabled then
+                            if rcEnabled and not isSpectatingPlayer then
                                 Camera.CameraType = Enum.CameraType.Custom
                                 local humObj = targetCar:FindFirstChildOfClass("Humanoid")
                                 Camera.CameraSubject = humObj or targetCar
                             end
 
-                            if dashcamEnabled then
+                            if dashcamEnabled and not isSpectatingPlayer then
                                 Camera.CameraType = Enum.CameraType.Scriptable
                                 Camera.CFrame = targetPart.CFrame * CFrame.new(0, 0.9, -0.4)
-                            elseif not rcEnabled then
+                            elseif not rcEnabled and not isSpectatingPlayer then
                                 resetCameraToPlayer()
                             end
                         end
@@ -634,7 +654,7 @@ local function evaluateSitState()
             setupToolTracking()
             sitConnection = RunService.RenderStepped:Connect(function(dt)
                 pcall(function()
-                    if not sitOnCarEnabled then return end
+                    if not sitOnCarEnabled or isSpectatingPlayer then return end
 
                     if not isToolEquippedInHand() then
                         if wasTrackingCar then
