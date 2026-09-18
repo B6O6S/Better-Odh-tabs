@@ -7,6 +7,7 @@ local UIS         = game:GetService("UserInputService")
 local RunService  = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera      = workspace.CurrentCamera
+local playerGui   = LocalPlayer:WaitForChild("PlayerGui")
 
 -- =============================
 -- 1) DELTA MOTION BLUR
@@ -343,3 +344,134 @@ if LocalPlayer:FindFirstChild("Backpack") then
         end
     end)
 end
+
+-- =============================
+-- 5) HIDE JOYSTICK & JUMP BUTTON
+-- =============================
+local hide_controls_enabled = false
+
+local function makeInvisible(object)
+    if not object:IsA("GuiObject") then return end
+    object.Visible = true
+    object.BackgroundTransparency = 1
+    if object:IsA("ImageButton") or object:IsA("ImageLabel") then
+        object.ImageTransparency = 1
+    end
+    if object:IsA("TextButton") or object:IsA("TextLabel") then
+        object.TextTransparency = 1
+    end
+    for _, descendant in ipairs(object:GetDescendants()) do
+        if descendant:IsA("UIStroke") then
+            descendant.Transparency = 1
+        elseif descendant:IsA("ImageButton") or descendant:IsA("ImageLabel") then
+            descendant.ImageTransparency = 1
+        elseif descendant:IsA("TextButton") or descendant:IsA("TextLabel") then
+            descendant.TextTransparency = 1
+        end
+    end
+end
+
+local function hideTouchGui(touchGui)
+    if not touchGui then return end
+    for _, descendant in ipairs(touchGui:GetDescendants()) do
+        makeInvisible(descendant)
+    end
+    if not touchGui:GetAttribute("InvisibleLoopConnected") then
+        touchGui:SetAttribute("InvisibleLoopConnected", true)
+        touchGui.DescendantAdded:Connect(function(descendant)
+            if hide_controls_enabled then
+                task.wait()
+                makeInvisible(descendant)
+            end
+        end)
+    end
+end
+
+custom_tab:AddToggle("Hide Joystick & Jump Button", function(on)
+    hide_controls_enabled = on
+end)
+
+task.spawn(function()
+    while true do
+        if hide_controls_enabled then
+            local touchGui = playerGui:FindFirstChild("TouchGui")
+            if touchGui then
+                hideTouchGui(touchGui)
+            end
+        end
+        task.wait(0.1)
+    end
+end)
+
+playerGui.ChildAdded:Connect(function(child)
+    if child.Name == "TouchGui" and hide_controls_enabled then
+        task.defer(function()
+            hideTouchGui(child)
+        end)
+    end
+end)
+
+-- =============================
+-- 6) SHOW FAKE PC CROSSHAIR
+-- =============================
+local crosshair_enabled = false
+local CROSSHAIR_ID = "rbxassetid://128576456498323"
+local CROSSHAIR_SIZE = 40
+
+local crosshairGui = Instance.new("ScreenGui")
+crosshairGui.Name = "ThirdPersonCrosshair"
+crosshairGui.ResetOnSpawn = false
+crosshairGui.IgnoreGuiInset = true
+crosshairGui.Parent = playerGui
+
+local crosshair = Instance.new("ImageLabel")
+crosshair.Name = "Crosshair"
+crosshair.BackgroundTransparency = 1
+crosshair.Image = CROSSHAIR_ID
+crosshair.ImageTransparency = 0
+crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+crosshair.Position = UDim2.fromScale(0.5, 0.5)
+crosshair.Size = UDim2.fromOffset(CROSSHAIR_SIZE, CROSSHAIR_SIZE)
+crosshair.Visible = false
+crosshair.Parent = crosshairGui
+
+custom_tab:AddToggle("Show Fake PC Crosshair", function(on)
+    crosshair_enabled = on
+    if not on then
+        crosshair.Visible = false
+    end
+end)
+
+local function isShiftLockActive()
+    return UIS.MouseBehavior == Enum.MouseBehavior.LockCenter
+end
+
+RunService.RenderStepped:Connect(function()
+    if not crosshair_enabled then
+        crosshair.Visible = false
+        return
+    end
+
+    local camera = workspace.CurrentCamera
+    if not camera then
+        crosshair.Visible = false
+        return
+    end
+
+    local character = LocalPlayer.Character
+    local head = character and character:FindFirstChild("Head")
+    if not head then
+        crosshair.Visible = false
+        return
+    end
+
+    local distance = (camera.CFrame.Position - head.Position).Magnitude
+    local firstPerson = distance <= 1.5
+    local shiftLock = isShiftLockActive()
+
+    if not firstPerson and not shiftLock then
+        crosshair.Visible = true
+    else
+        crosshair.Visible = false
+    end
+end)
