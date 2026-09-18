@@ -1,5 +1,7 @@
 local shared = odh_shared_plugins
-local custom_tab = shared.AddSection("Customizations")
+local custom_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
+local custom_section = custom_tab:AddSection("Customizations", "Active Configuration")
+
 
 local Players     = game:GetService("Players")
 local Lighting    = game:GetService("Lighting")
