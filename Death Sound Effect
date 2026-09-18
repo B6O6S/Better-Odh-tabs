@@ -1,7 +1,9 @@
 local shared = odh_shared_plugins
 
--- Create a new section
-local jukeSoundSection = shared.AddSection("Death Sound Effect")
+
+local sound_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
+local jukeSoundSection = sound_tab:AddSection("Death Sound Effect")
+
 
 -- Sound options ordered normally, with Custom at the very end
 local sounds = {
