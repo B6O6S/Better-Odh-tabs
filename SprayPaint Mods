@@ -1,5 +1,6 @@
 local shared = odh_shared_plugins
-local spray_section = shared.AddSection("SprayPaint Mods")
+local spray_tab = shared.CreateTab("Better ODH", "/axioriasolver/testplugin/refs/heads/main/icon")
+local spray_section = spray_tab:AddSection("SprayPaint Mods", "Active Configuration")
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
