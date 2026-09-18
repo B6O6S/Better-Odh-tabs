@@ -1,0 +1,184 @@
+local shared = odh_shared_plugins
+local spray_section = shared.AddSection("SprayPaint Mods")
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Variables for IDs (6 images) and Sequential state
+local imageIds = {"", "", "", "", "", ""}
+local loopSprayEnabled = false
+local infiniteDistanceEnabled = false
+local isSeqRunning = false
+
+spray_section:AddLabel("⚠️ You need to manually click (Add)")
+
+-- UI Setup: Toggles FIRST on top
+spray_section:AddToggle("Loop Add SprayPaints IDs", function(bool)
+    loopSprayEnabled = bool
+    if not bool then
+        isSeqRunning = false
+    end
+end)
+
+spray_section:AddToggle("Infinite Spray Distance (Buggy)", function(on)
+    infiniteDistanceEnabled = on
+end)
+
+
+-- 6 Textboxes BELOW label/toggles
+for i = 1, 6 do
+    spray_section:AddTextBox("Image " .. i, function(text)
+        imageIds[i] = text or ""
+    end)
+end
+
+local function getGameTextBox()
+    return playerGui:FindFirstChild("SprayGui")
+        and playerGui.SprayGui:FindFirstChild("Main")
+        and playerGui.SprayGui.Main:FindFirstChild("Container")
+        and playerGui.SprayGui.Main.Container:FindFirstChild("Add")
+        and playerGui.SprayGui.Main.Container.Add:FindFirstChild("Frame")
+        and playerGui.SprayGui.Main.Container.Add.Frame:FindFirstChild("Container")
+        and playerGui.SprayGui.Main.Container.Add.Frame.Container:FindFirstChild("TextBox")
+end
+
+local function getSprayTool()
+    local char = player.Character
+    if char and char:FindFirstChild("SprayPaint") then
+        return char.SprayPaint
+    end
+    local bp = player:FindFirstChild("Backpack")
+    if bp and bp:FindFirstChild("SprayPaint") then
+        return bp.SprayPaint
+    end
+    return nil
+end
+
+local function invokeRemote(assetId)
+    local sprayPaint = getSprayTool()
+    if not sprayPaint then return false end
+    local remote = sprayPaint:FindFirstChild("SprayClient") and sprayPaint.SprayClient:FindFirstChild("GetAssetApproved")
+    if remote and remote:IsA("RemoteFunction") then
+        local success, result = pcall(function()
+            return remote:InvokeServer(tonumber(assetId) or assetId)
+        end)
+        return success, result
+    end
+    return false
+end
+
+-- Checks if image asset ID rendered in spray list GUI right now
+local function isImageLoadedInGui(assetId)
+    local targetStr = tostring(assetId)
+    local searchRoot = playerGui:FindFirstChild("SprayGui") or playerGui
+    for _, desc in ipairs(searchRoot:GetDescendants()) do
+        if (desc:IsA("ImageLabel") or desc:IsA("ImageButton")) and string.find(desc.Image, targetStr, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Collect valid non-empty IDs list (up to 6)
+local function getValidIds()
+    local valid = {}
+    for i = 1, 6 do
+        local clean = tostring(imageIds[i] or ""):gsub("%s+", "")
+        if clean ~= "" and clean ~= "nil" then
+            table.insert(valid, {index = i, id = clean})
+        end
+    end
+    return valid
+end
+
+-- Continuous Enforcer / Monitor Loop: Checks if all valid IDs (1-6) are detected; restarts from start if any missing
+task.spawn(function()
+    while task.wait(0.8) do
+        if loopSprayEnabled and not isSeqRunning then
+            local tool = getSprayTool()
+            if tool then
+                local validList = getValidIds()
+                if #validList > 0 then
+                    local allLoaded = true
+                    for _, item in ipairs(validList) do
+                        if not isImageLoadedInGui(item.id) then
+                            allLoaded = false
+                            break
+                        end
+                    end
+                    
+                    -- If any image 1-6 is not detected in game UI, restart sequence from beginning
+                    if not allLoaded then
+                        isSeqRunning = true
+                        task.spawn(function()
+                            for _, item in ipairs(validList) do
+                                if not loopSprayEnabled then break end
+                                while loopSprayEnabled and not getSprayTool() do
+                                    task.wait(0.5)
+                                end
+                                if not loopSprayEnabled then break end
+                                
+                                local cleanId = item.id
+                                local tb = getGameTextBox()
+                                if tb and tb:IsA("TextBox") then
+                                    tb.Text = cleanId
+                                end
+                                invokeRemote(cleanId)
+                                
+                                -- Wait until detected in UI or retry slice
+                                local elapsed = 0
+                                while loopSprayEnabled and elapsed < 4.0 do
+                                    if isImageLoadedInGui(cleanId) then break end
+                                    invokeRemote(cleanId)
+                                    task.wait(0.4)
+                                    elapsed = elapsed + 0.4
+                                end
+                                task.wait(0.2)
+                            end
+                            isSeqRunning = false
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Infinite Spray Distance (Buggy) override loop
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if infiniteDistanceEnabled then
+            local sprayPaint = getSprayTool()
+            if sprayPaint then
+                pcall(function()
+                    sprayPaint:SetAttribute("MaxDistance", math.huge)
+                    sprayPaint:SetAttribute("Range", math.huge)
+                    sprayPaint:SetAttribute("SprayDistance", math.huge)
+                    sprayPaint:SetAttribute("Reach", math.huge)
+                    for _, v in ipairs(sprayPaint:GetDescendants()) do
+                        if v:IsA("NumberValue") or v:IsA("IntValue") then
+                            local n = v.Name:lower()
+                            if n:find("dist") or n:find("range") or n:find("reach") then
+                                v.Value = math.huge
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end)
+
+if hookmetamethod and getnamecallmethod then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if infiniteDistanceEnabled and (method == "Raycast" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay") then
+            -- Intercept ray reach if game uses native ray casting
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
