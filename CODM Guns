@@ -1,7 +1,9 @@
 local shared = odh_shared_plugins  
 
--- Create a new section  
-local gunEffectSection = shared.AddSection("CODM Guns")  
+  
+local codm_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
+local gunEffectSection = codm_tab:AddSection("CODM Guns")
+ 
 gunEffectSection:AddLabel("⚠️ It's only work on godly guns")
 local Players = game:GetService("Players")  
 local Workspace = game:GetService("Workspace")  
