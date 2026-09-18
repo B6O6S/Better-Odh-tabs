@@ -1,6 +1,7 @@
 local shared = odh_shared_plugins
 
-local credits_tab = shared.AddSection("Credits")
+local credits_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
+local credits_section = credits_tab:AddSection("Credits", "Author Info")
 
 credits_tab:AddLabel('Credits To: <font color="rgb(255,0,0)">B6O6S (@B6O6S) - Owner/Programmer</font>')
 credits_tab:AddLabel('Credits To: <font color="rgb(255,0,0)">k.6z (@3r_q5) - Helper/Tester</font>')
