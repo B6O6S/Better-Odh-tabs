@@ -1,4 +1,4 @@
-
+local shared = odh_shared_plugins
 local custom_section       = tab:AddSection("Customizations", "Active Configuration")
 -- =============================
 -- CUSTOMIZATIONS SECTION
