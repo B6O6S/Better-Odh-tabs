@@ -8,7 +8,8 @@ local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local ui_tab = shared.AddSection("UI & Fonts")
+local ui_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
+local ui_section = ui_tab:AddSection("UI & Fonts")
 
 -- =============================
 -- WIDE SCREEN SETTINGS
