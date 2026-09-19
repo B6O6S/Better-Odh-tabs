@@ -1,18 +1,15 @@
-local shared = odh_shared_plugins
 
-local custom_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
-local custom_section = custom_tab:AddSection("Customizations", "Active Configuration")
-
-local Players     = game:GetService("Players")
-local Lighting    = game:GetService("Lighting")
-local UIS         = game:GetService("UserInputService")
-local RunService  = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local Camera      = workspace.CurrentCamera
-local playerGui   = LocalPlayer:WaitForChild("PlayerGui")
+local Players             = game:GetService("Players")
+local Lighting            = game:GetService("Lighting")
+local UIS                 = game:GetService("UserInputService")
+local RunService          = game:GetService("RunService")
+local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local LocalPlayer         = Players.LocalPlayer
+local Camera              = workspace.CurrentCamera
+local playerGui           = LocalPlayer:WaitForChild("PlayerGui")
 
 -- =============================
--- 1) DELTA MOTION BLUR
+-- CUSTOMIZATIONS SECTION
 -- =============================
 local blur = Lighting:FindFirstChild("DeltaMotionBlur") or Instance.new("BlurEffect", Lighting)
 blur.Name = "DeltaMotionBlur"
@@ -67,9 +64,6 @@ RunService.RenderStepped:Connect(function(dt)
     lastCFrame = currentCFrame
 end)
 
--- =============================
--- 2) JUMP BUTTON SIZE
--- =============================
 local jb_enabled = false
 local jb_size    = 100
 
@@ -125,9 +119,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- =============================
--- 3) TOOLS OUTLINE & TRANSPARENCY
--- =============================
 local outline_enabled = false
 local outline_rainbow = false
 local tool_trans_enabled = false
@@ -307,9 +298,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- =============================
--- 4) RESPAWN & BACKPACK LISTENERS
--- =============================
 local function setupCharacter(char)
     char.ChildAdded:Connect(function(obj)
         if obj:IsA("Tool") then
@@ -347,9 +335,6 @@ if LocalPlayer:FindFirstChild("Backpack") then
     end)
 end
 
--- =============================
--- 5) HIDE JOYSTICK & JUMP BUTTON
--- =============================
 local hide_controls_enabled = false
 
 local function makeInvisible(object)
@@ -413,9 +398,6 @@ playerGui.ChildAdded:Connect(function(child)
     end
 end)
 
--- =============================
--- 6) SHOW FAKE PC CROSSHAIR
--- =============================
 local crosshair_enabled = false
 local CROSSHAIR_ID = "rbxassetid://128576456498323"
 local CROSSHAIR_SIZE = 40
