@@ -1,27 +1,22 @@
--- =============================
--- UI, FONTS & STATS TAB
--- =============================
 local shared = odh_shared_plugins
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-local RunService = game:GetService("RunService")
+local tab = shared.GetTab("Better ODH")
+local ui_section = tab:AddSection("UI & Fonts")
+
+local Players     = game:GetService("Players")
+local RunService  = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local Camera      = workspace.CurrentCamera
+local playerGui   = LocalPlayer:WaitForChild("PlayerGui")
 
-local ui_tab = shared.CreateTab("Better ODH", "/B6O6S/Better-ODH/refs/heads/main/Better%20ODH")
-local ui_section = ui_tab:AddSection("UI & Fonts")
-
--- =============================
--- WIDE SCREEN SETTINGS
--- =============================
 local wideScreenEnabled = false
 local wideScreenSliderValue = 7
 
-ui_tab:AddToggle("Stretch Screen", function(on)
+ui_section:AddToggle("Stretch Screen", function(on)
     wideScreenEnabled = on
 end)
 
-ui_tab:AddSlider("Stretch Screen Strength", 1, 10, wideScreenSliderValue, function(v)
+ui_section:AddSlider("Stretch Screen Strength", 1, 10, wideScreenSliderValue, function(v)
     wideScreenSliderValue = v
 end)
 
@@ -32,59 +27,50 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- =============================
--- TRADE REQUESTS TOGGLE (DIRECT REMOTE)
--- =============================
 local tradeRequestsEnabled = true
 local tradeEvent = ReplicatedStorage:WaitForChild("Trade"):WaitForChild("SetRequestsEnabled")
 
-ui_tab:AddToggle("Disable Trade Requests", function(on)
+ui_section:AddToggle("Disable Trade Requests", function(on)
     tradeRequestsEnabled = not on
     pcall(function()
         tradeEvent:FireServer(tradeRequestsEnabled)
     end)
 end)
 
--- =============================
--- VISUAL STAT SPOOFER CONTROLS (OPTIMIZED)
--- =============================
 local spooferActive = false
 local statVal1 = "0"
 local statVal2 = "0"
 local statVal3 = "0"
 
-ui_tab:AddToggle("Enable Visual Stat Spoofer", function(on)
+ui_section:AddToggle("Enable Visual Stat Spoofer", function(on)
     spooferActive = on
 end)
 
-ui_tab:AddTextBox("Stat 1 (Murderer / Eliminations)", function(text)
+ui_section:AddTextBox("Stat 1 (Murderer / Eliminations)", function(text)
     statVal1 = tostring(text or "0")
 end)
 
-ui_tab:AddTextBox("Stat 2 (Sheriff / Saves)", function(text)
+ui_section:AddTextBox("Stat 2 (Sheriff / Saves)", function(text)
     statVal2 = tostring(text or "0")
 end)
 
-ui_tab:AddTextBox("Stat 3 (Innocent / Survivals)", function(text)
+ui_section:AddTextBox("Stat 3 (Innocent / Survivals)", function(text)
     statVal3 = tostring(text or "0")
 end)
 
--- Optimized updating loop using a targeted cache to eliminate heavy :GetDescendants() FPS drops
 task.spawn(function()
     local cachedStatsElements = {}
     local lastCacheCheck = 0
 
     while true do
-        task.wait(0.5) -- Increased interval from 0.1s to 0.5s to drastically lower overhead
+        task.wait(0.5)
         if spooferActive then
             pcall(function()
                 local currentTime = tick()
-                -- Refresh cache every 3 seconds or if cache is empty
                 if currentTime - lastCacheCheck > 3 or #cachedStatsElements == 0 then
                     lastCacheCheck = currentTime
                     table.clear(cachedStatsElements)
 
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     local mainGui = playerGui and playerGui:FindFirstChild("MainGUI")
                     if mainGui then
                         for _, desc in ipairs(mainGui:GetDescendants()) do
@@ -112,7 +98,6 @@ task.spawn(function()
                     end
                 end
 
-                -- Directly update cached references without expensive tree searching
                 for _, entry in ipairs(cachedStatsElements) do
                     if entry.ElimAmount and entry.ElimAmount.Parent then
                         entry.ElimAmount.Text = tostring(statVal1)
@@ -126,7 +111,6 @@ task.spawn(function()
                 end
             end)
         else
-            -- Clear cache when spoofer is turned off
             if #cachedStatsElements > 0 then
                 table.clear(cachedStatsElements)
             end
@@ -134,9 +118,6 @@ task.spawn(function()
     end
 end)
 
--- =============================
--- FONTS SETTINGS
--- =============================
 local fonts = {
     ["SourceSansBold (Original)"] = Enum.Font.SourceSansBold,
     ["Gotham"] = Enum.Font.Gotham,
@@ -152,19 +133,19 @@ local fonts = {
 
 local selectedFont = "SourceSansBold (Original)"
 
-ui_tab:AddDropdown("Select Font", {
+ui_section:AddDropdown("Select Font", {
     "SourceSansBold (Original)", "Gotham", "Arcade", "Arial", "ArialBold", "Cartoon", "Fantasy", "Highway", "Code", "Legacy"
 }, function(selected)
     selectedFont = selected
     local fontEnum = fonts[selectedFont] or Enum.Font.SourceSansBold
-    for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+    for _, gui in ipairs(playerGui:GetDescendants()) do
         if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
             gui.Font = fontEnum
         end
     end
 end)
 
-LocalPlayer.PlayerGui.DescendantAdded:Connect(function(gui)
+playerGui.DescendantAdded:Connect(function(gui)
     if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
         gui.Font = fonts[selectedFont] or Enum.Font.SourceSansBold
     end
