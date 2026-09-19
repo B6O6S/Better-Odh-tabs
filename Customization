@@ -1,4 +1,5 @@
 
+local custom_section       = tab:AddSection("Customizations", "Active Configuration")
 -- =============================
 -- CUSTOMIZATIONS SECTION
 -- =============================
